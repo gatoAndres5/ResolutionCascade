@@ -1,0 +1,24 @@
+{
+  "name": "resolutioncascade",
+  "version": "1.0.0",
+  "description": "Desktop app with Election",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "build": {
+    "appId": "com.example.resolutioncascade",
+    "productName": "ResolutionCascade",
+    "win": {
+      "target": "nsis"
+    }
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^36.2.1",
+    "electron-builder": "^26.0.12"
+  }
+}

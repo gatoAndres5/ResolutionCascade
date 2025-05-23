@@ -1,24 +1,29 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 
-
-
-
+let mainWindow;
 
 function createWindow() {
-  const win = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1000,
     height: 800,
     webPreferences: {
-      nodeIntegration: true
-    }
+      nodeIntegration: true,
+      contextIsolation: false,  // Needed for ipcRenderer in this setup
+    },
   });
 
-  // Load your GUI from local file or from Django
-  win.loadFile('index.html');
-
+  mainWindow.loadFile('index.html');
 }
 
 app.whenReady().then(() => {
   createWindow();
+
+  ipcMain.on('navigate-to-config', () => {
+    mainWindow.loadFile('config.html');
+  });
+
+  ipcMain.on('navigate-to-home', () => {
+    mainWindow.loadFile('index.html');
+  });
 });

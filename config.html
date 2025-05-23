@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Config</title>
+  </head>
+  <body>
+    <h1>Configuration Page</h1>
+    <button onclick="goBack()">Back to Home</button>
+
+    <script>
+      const { ipcRenderer } = require('electron');
+
+      function goBack() {
+        ipcRenderer.send('navigate-to-home');
+      }
+    </script>
+  </body>
+</html>

@@ -1,18 +1,121 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <title>Config</title>
-  </head>
-  <body>
-    <h1>Configuration Page</h1>
-    <button onclick="goBack()">Back to Home</button>
+<head>
+  <title>Config</title>
+  <style>
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 20px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+    }
+    th {
+      text-align: left;
+      background-color: #f0f0f0;
+    }
+    .hidden {
+      display: none;
+    }
+    .element-block {
+      border: 1px solid #aaa;
+      padding: 10px;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Configuration Page</h1>
 
-    <script>
-      const { ipcRenderer } = require('electron');
+  <label for="element-count">Enter how many elements are in your system:</label>
+  <input type="number" id="element-count" min="1" step="1" />
+  <button id="define-elements">Next</button>
 
-      function goBack() {
-        ipcRenderer.send('navigate-to-home');
+  <form id="config-form" class="hidden"></form>
+
+  <br>
+  <button id="go-to-home">Back to Home</button>
+
+  <script>
+    const configForm = document.getElementById('config-form');
+
+    const elementInputs = {
+      'Bundle': `
+        <tr><td>Core Diameter (mm)</td><td><input type="number" step="any" name="core_diameter"></td></tr>
+        <tr><td>Core to Core Spacing (mm)</td><td><input type="number" step="any" name="core_spacing"></td></tr>
+      `,
+      'Lens': `
+        <tr><td>Wavelength (mm)</td><td><input type="number" step="any" name="wavelength"></td></tr>
+        <tr><td>Numerical Aperture (NA)</td><td><input type="number" step="any" name="na"></td></tr>
+      `,
+      'Detector': `
+        <tr><td>Pixel Dimension X (mm)</td><td><input type="number" step="any" name="pixel_x"></td></tr>
+        <tr><td>Pixel Dimension Y (mm)</td><td><input type="number" step="any" name="pixel_y"></td></tr>
+        <tr><td>Binning (e.g., 2x2, 4x4)</td><td><input type="text" name="binning"></td></tr>
+      `,
+      'Display': `
+        <tr><td>Pixel Dimension X (mm)</td><td><input type="number" step="any" name="disp_pixel_x"></td></tr>
+        <tr><td>Pixel Dimension Y (mm)</td><td><input type="number" step="any" name="disp_pixel_y"></td></tr>
+        <tr><td>Binning (e.g., 2x2, 4x4)</td><td><input type="text" name="disp_binning"></td></tr>
+      `,
+      'Eye': `
+        <tr><td>Viewing Distance Z (mm)</td><td><input type="number" step="any" name="view_dist"></td></tr>
+        <tr><td>Luminance (L/srm²)</td><td><input type="number" step="any" name="luminance"></td></tr>
+      `
+    };
+
+    document.getElementById('define-elements').addEventListener('click', () => {
+      const count = parseInt(document.getElementById('element-count').value);
+      if (isNaN(count) || count <= 0) {
+        alert("Please enter a valid number greater than 0.");
+        return;
       }
-    </script>
-  </body>
+
+      configForm.innerHTML = "";
+      configForm.classList.remove('hidden');
+
+      for (let i = 1; i <= count; i++) {
+        const block = document.createElement('div');
+        block.className = 'element-block';
+        block.innerHTML = `
+          <h3>Element ${i}</h3>
+          <label>Type:
+            <select class="type-select" data-element="${i}">
+              <option value="">-- Select --</option>
+              <option value="Bundle">Bundle</option>
+              <option value="Lens">Lens</option>
+              <option value="Detector">Detector</option>
+              <option value="Display">Display</option>
+              <option value="Eye">Eye</option>
+            </select>
+          </label>
+          <div class="element-fields" id="fields-${i}"></div>
+        `;
+        configForm.appendChild(block);
+      }
+    });
+
+    configForm.addEventListener('change', (e) => {
+      if (e.target.classList.contains('type-select')) {
+        const elementId = e.target.dataset.element;
+        const selectedType = e.target.value;
+        const fieldsContainer = document.getElementById(`fields-${elementId}`);
+        fieldsContainer.innerHTML = "";
+
+        if (elementInputs[selectedType]) {
+          const table = document.createElement('table');
+          table.innerHTML = `
+            <tr><th>Parameter</th><th>Value</th></tr>
+            ${elementInputs[selectedType]}
+          `;
+          fieldsContainer.appendChild(table);
+        }
+      }
+    });
+  </script>
+
+  <script src="renderer.js"></script>
+</body>
 </html>

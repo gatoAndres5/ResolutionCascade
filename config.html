@@ -36,34 +36,19 @@
   <form id="config-form" class="hidden"></form>
 
   <br>
+  <button id="generate-config" class="hidden">Generate</button>
   <button id="go-to-home">Back to Home</button>
 
   <script>
     const configForm = document.getElementById('config-form');
+    const generateBtn = document.getElementById('generate-config');
 
     const elementInputs = {
-      'Bundle': `
-        <tr><td>Core Diameter (mm)</td><td><input type="number" step="any" name="core_diameter"></td></tr>
-        <tr><td>Core to Core Spacing (mm)</td><td><input type="number" step="any" name="core_spacing"></td></tr>
-      `,
-      'Lens': `
-        <tr><td>Wavelength (mm)</td><td><input type="number" step="any" name="wavelength"></td></tr>
-        <tr><td>Numerical Aperture (NA)</td><td><input type="number" step="any" name="na"></td></tr>
-      `,
-      'Detector': `
-        <tr><td>Pixel Dimension X (mm)</td><td><input type="number" step="any" name="pixel_x"></td></tr>
-        <tr><td>Pixel Dimension Y (mm)</td><td><input type="number" step="any" name="pixel_y"></td></tr>
-        <tr><td>Binning (e.g., 2x2, 4x4)</td><td><input type="text" name="binning"></td></tr>
-      `,
-      'Display': `
-        <tr><td>Pixel Dimension X (mm)</td><td><input type="number" step="any" name="disp_pixel_x"></td></tr>
-        <tr><td>Pixel Dimension Y (mm)</td><td><input type="number" step="any" name="disp_pixel_y"></td></tr>
-        <tr><td>Binning (e.g., 2x2, 4x4)</td><td><input type="text" name="disp_binning"></td></tr>
-      `,
-      'Eye': `
-        <tr><td>Viewing Distance Z (mm)</td><td><input type="number" step="any" name="view_dist"></td></tr>
-        <tr><td>Luminance (L/srm²)</td><td><input type="number" step="any" name="luminance"></td></tr>
-      `
+      'Bundle': ['core_diameter', 'core_spacing'],
+      'Lens': ['wavelength', 'na'],
+      'Detector': ['pixel_x', 'pixel_y', 'binning'],
+      'Display': ['disp_pixel_x', 'disp_pixel_y', 'disp_binning'],
+      'Eye': ['view_dist', 'luminance']
     };
 
     document.getElementById('define-elements').addEventListener('click', () => {
@@ -75,10 +60,12 @@
 
       configForm.innerHTML = "";
       configForm.classList.remove('hidden');
+      generateBtn.classList.remove('hidden');
 
       for (let i = 1; i <= count; i++) {
         const block = document.createElement('div');
         block.className = 'element-block';
+        block.dataset.index = i;
         block.innerHTML = `
           <h3>Element ${i}</h3>
           <label>Type:
@@ -106,12 +93,45 @@
 
         if (elementInputs[selectedType]) {
           const table = document.createElement('table');
-          table.innerHTML = `
-            <tr><th>Parameter</th><th>Value</th></tr>
-            ${elementInputs[selectedType]}
-          `;
+          table.innerHTML = `<tr><th>Parameter</th><th>Value</th></tr>`;
+          elementInputs[selectedType].forEach(name => {
+            const label = name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            table.innerHTML += `
+              <tr>
+                <td>${label}</td>
+                <td><input type="text" name="${name}" /></td>
+              </tr>`;
+          });
+          table.setAttribute('data-type', selectedType);
           fieldsContainer.appendChild(table);
         }
+      }
+    });
+
+    generateBtn.addEventListener('click', () => {
+      const blocks = document.querySelectorAll('.element-block');
+      const configData = [];
+
+      blocks.forEach(block => {
+        const type = block.querySelector('.type-select').value;
+        if (!type) return;
+
+        const inputs = block.querySelectorAll('input');
+        const element = { type };
+        inputs.forEach(input => {
+          element[input.name] = input.value;
+        });
+
+        configData.push(element);
+      });
+
+      // Send configData to main process for saving
+      if (window.require) {
+        const { ipcRenderer } = require('electron');
+        ipcRenderer.send('save-config', configData);
+        alert("Configuration sent to backend for saving!");
+      } else {
+        console.warn("Not running in Electron.");
       }
     });
   </script>

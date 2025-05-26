@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
+const fs = require('fs');
 
 let mainWindow;
 
@@ -25,5 +26,11 @@ app.whenReady().then(() => {
 
   ipcMain.on('navigate-to-home', () => {
     mainWindow.loadFile('index.html');
+  });
+
+  ipcMain.on('save-config', (event, configData) => {
+    const filePath = path.join(__dirname, 'resolution_config.json');
+    fs.writeFileSync(filePath, JSON.stringify(configData, null, 2));
+    console.log("Configuration saved to:", filePath);
   });
 });

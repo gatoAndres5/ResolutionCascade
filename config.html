@@ -25,6 +25,8 @@
       margin-top: 20px;
     }
   </style>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
 </head>
 <body>
   <h1>Configuration Page</h1>
@@ -137,5 +139,37 @@
   </script>
 
   <script src="renderer.js"></script>
+  <h2>3D Plot of Matrix</h2>
+<div id="matrix-plot" style="width: 800px; height: 800px;"></div>
+
+<script>
+  const fs = require('fs');
+  const path = require('path');
+
+  const matrixPath = path.join(__dirname, 'matrix_modified.json');
+  if (fs.existsSync(matrixPath)) {
+    const matrixData = JSON.parse(fs.readFileSync(matrixPath));
+
+    const numRows = matrixData.length;
+    const numCols = matrixData[0].length;
+
+    const x = Array.from({ length: numCols }, (_, i) => i);
+    const y = Array.from({ length: numRows }, (_, i) => i);
+    const z = matrixData;
+
+    const data = [{
+      z: z,
+      x: x,
+      y: y,
+      type: 'surface'
+    }];
+
+    Plotly.newPlot('matrix-plot', data);
+  } else {
+    console.warn("matrix_modified.json not found.");
+  }
+</script>
+
+
 </body>
 </html>

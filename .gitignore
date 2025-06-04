@@ -2,3 +2,5 @@
 /dist
 /resolution_config.json
 /matrix_output.json
+/mtf3_output.json
+/matrix_modified.json

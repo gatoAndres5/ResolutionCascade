@@ -1,4 +1,7 @@
 import json
+import math
+
+import numpy as np
 
 
 
@@ -21,9 +24,65 @@ def doSomething():
     with open("matrix_modified.json", "w") as f:
         json.dump(result, f)
     print("Modified matrix saved to matrix_modified.json")
+
+def matlab_sinc(x):
+    """MATLAB-style sinc: sin(x)/x"""
+    return np.sinc(x / np.pi)
+
+def detectorMTF():
+    # Load matrix (for shape only — we just care about dimensions)
+    with open("matrix_output.json", "r") as f:
+        matrix = json.load(f)
+
+    height = len(matrix)
+    width = len(matrix[0])
+
+    # Load config to get binning factor
+    with open("resolution_config.json", "r") as f:
+        config = json.load(f)
+
+    # Get binning and pixel size from the first detector element
+    binning = 1.0
+    pixSizeX = 1.0
+    pixSizeY = 1.0
+
+    for element in config:
+        if element.get("type") == "Detector":
+            bin_str = element.get("binning", "1")
+            try:
+                binning = eval(bin_str)  # Safe only if you control input
+            except Exception:
+                print("Failed to parse binning. Defaulting to 1.")
+                binning = 1.0
+
+            try:
+                pixSizeX = float(element.get("pixel_x", "1"))
+                pixSizeY = float(element.get("pixel_y", "1"))
+            except ValueError:
+                print("Failed to parse pixel sizes. Defaulting to 1.0.")
+                pixSizeX = pixSizeY = 1.0
+            break
+
+    # Constants using parsed values
+    wx4 = pixSizeX * binning
+    wy4 = pixSizeY * binning
+
+    # Generate coordinate grid
+    x = np.arange(width)
+    y = np.arange(height)
+    Xi, Eta = np.meshgrid(x, y)
+
+    # Calculate MTF3
+    mtf3 = np.abs(np.sinc(Xi * wx4)) * np.abs(np.sinc(Eta * wy4))
+
+    # Optionally save MTF3 to file
+    with open("mtf3_output.json", "w") as f:
+        json.dump(mtf3.tolist(), f)
+
+    print("MTF3 calculation complete. Saved to mtf3_output.json.")
     
 
 if __name__ == "__main__":
     create_matrix()
-    doSomething()
+    detectorMTF()
 

@@ -25,9 +25,6 @@ def doSomething():
         json.dump(result, f)
     print("Modified matrix saved to matrix_modified.json")
 
-def matlab_sinc(x):
-    """MATLAB-style sinc: sin(x)/x"""
-    return np.sinc(x / np.pi)
 
 def detectorMTF():
     # Load matrix (for shape only — we just care about dimensions)
@@ -80,9 +77,56 @@ def detectorMTF():
         json.dump(mtf3.tolist(), f)
 
     print("MTF3 calculation complete. Saved to mtf3_output.json.")
-    
+
+def lensMTF():
+    # Load matrix to determine dimensions
+    with open("matrix_output.json", "r") as f:
+        matrix = json.load(f)
+
+    height = len(matrix)
+    width = len(matrix[0])
+
+    # Load config to get wavelength and NA
+    with open("resolution_config.json", "r") as f:
+        config = json.load(f)
+
+    wavelength = 1.0
+    NA = 1.0
+
+    for element in config:
+        if element.get("type") == "Lens":
+            try:
+                wavelength = float(element.get("wavelength", "1"))
+                NA = float(element.get("na", "1"))
+            except ValueError:
+                print("Failed to parse wavelength or NA. Defaulting to 1.0.")
+                wavelength = NA = 1.0
+            break
+
+    # Generate coordinate grid
+    x = np.arange(width)
+    y = np.arange(height)
+    Xi, Eta = np.meshgrid(x, y)
+
+    # Compute radial distance R
+    R = np.sqrt(Xi**2 + Eta**2)
+
+    # Compute phi with domain-clamped argument
+    argument = np.clip((wavelength * R) / (2 * NA), -1.0, 1.0)
+    with np.errstate(invalid='ignore'):
+        phi = np.arccos(argument)
+
+    # MTF2 formula
+    mtf2 = (2 * (phi - np.cos(phi) * np.sin(phi))) / np.pi
+    mtf2 = np.nan_to_num(mtf2)
+
+    # Save result to file
+    with open("mtf2_output.json", "w") as f:
+        json.dump(mtf2.tolist(), f)
+
+    print("MTF2 calculation complete. Saved to mtf2_output.json.")
 
 if __name__ == "__main__":
     create_matrix()
-    detectorMTF()
+    lensMTF()
 

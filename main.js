@@ -30,7 +30,7 @@ app.whenReady().then(() => {
   });
 
   ipcMain.on('save-config', (event, configData) => {
-    const filePath = path.join(__dirname, 'resolution_config.json');
+    const filePath = path.join(__dirname, 'build/resolution_config.json');
     fs.writeFileSync(filePath, JSON.stringify(configData, null, 2));
     console.log("Configuration saved to:", filePath);
 

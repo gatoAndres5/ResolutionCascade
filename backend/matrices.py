@@ -2,13 +2,13 @@ import json
 import math
 
 import numpy as np
-
+from scipy.special import j1
 
 
 def create_matrix():
     matrix = [[0 for _ in range(1000)] for _ in range(1000)]
     # Save to JSON file
-    with open("matrix_output.json", "w") as f:
+    with open("build/matrix_output.json", "w") as f:
         json.dump(matrix, f)
 
     print("Matrix saved to matrix_output.json")
@@ -73,7 +73,7 @@ def detectorMTF():
     mtf3 = np.abs(np.sinc(Xi * wx4)) * np.abs(np.sinc(Eta * wy4))
 
     # Optionally save MTF3 to file
-    with open("mtf3_output.json", "w") as f:
+    with open("build/mtf3_output.json", "w") as f:
         json.dump(mtf3.tolist(), f)
 
     print("MTF3 calculation complete. Saved to mtf3_output.json.")
@@ -121,12 +121,60 @@ def lensMTF():
     mtf2 = np.nan_to_num(mtf2)
 
     # Save result to file
-    with open("mtf2_output.json", "w") as f:
+    with open("build/mtf2_output.json", "w") as f:
         json.dump(mtf2.tolist(), f)
 
     print("MTF2 calculation complete. Saved to mtf2_output.json.")
 
+def bundleMTF():
+    # Load matrix to determine dimensions
+    with open("build/matrix_output.json", "r") as f:
+        matrix = json.load(f)
+
+    height = len(matrix)
+    width = len(matrix[0])
+
+    # Load bundle parameters from config
+    with open("build/resolution_config.json", "r") as f:
+        config = json.load(f)
+
+    core_diameter = 1.0
+    spacing = 1.0
+
+    for element in config:
+        if element.get("type") == "Bundle":
+            try:
+                core_diameter = float(element.get("core_diameter", "1"))
+                spacing = float(element.get("core_spacing", "1"))
+            except ValueError:
+                print("Invalid core parameters. Using default values.")
+            break
+
+    r_core = core_diameter / 2
+
+    # Create coordinate grid centered at zero
+    x = np.linspace(-width // 2, width // 2, width)
+    y = np.linspace(-height // 2, height // 2, height)
+    Xi, Eta = np.meshgrid(x, y)
+    rho = np.sqrt(Xi**2 + Eta**2)
+
+    # Avoid division by zero in Bessel argument
+    with np.errstate(divide='ignore', invalid='ignore'):
+        argument = np.pi * r_core * rho
+        bessel = np.ones_like(rho)
+        mask = argument != 0
+        bessel[mask] = (2 * j1(argument[mask])) / argument[mask]
+
+    mtf1 = (np.pi * r_core**2) * bessel
+    mtf1 = np.nan_to_num(mtf1)
+
+    # Save output
+    with open("build/mtf1_output.json", "w") as f:
+        json.dump(mtf1.tolist(), f)
+
+    print("MTF1 (bundle) calculation complete. Saved to mtf1_output.json.")
+
 if __name__ == "__main__":
     create_matrix()
-    lensMTF()
+    bundleMTF()
 

@@ -146,7 +146,7 @@
   const fs = require('fs');
   const path = require('path');
 
-  const matrixPath = path.join(__dirname, 'mtf2_output.json');
+  const matrixPath = path.join(__dirname, 'build/mtf1_output.json');
   if (fs.existsSync(matrixPath)) {
     const matrixData = JSON.parse(fs.readFileSync(matrixPath));
 

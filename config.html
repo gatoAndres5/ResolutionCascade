@@ -146,25 +146,41 @@
   const fs = require('fs');
   const path = require('path');
 
-  const matrixPath = path.join(__dirname, 'build/mtf1_output.json');
+  const matrixPath = path.join(__dirname, 'build/mtf3_output.json');
   if (fs.existsSync(matrixPath)) {
     const matrixData = JSON.parse(fs.readFileSync(matrixPath));
 
     const numRows = matrixData.length;
     const numCols = matrixData[0].length;
 
-    const x = Array.from({ length: numCols }, (_, i) => i);
-    const y = Array.from({ length: numRows }, (_, i) => i);
-    const z = matrixData;
+    // Full centered axes
+    const xFull = Array.from({ length: numCols }, (_, i) => i - (numCols - 1) / 2);
+    const yFull = Array.from({ length: numRows }, (_, i) => i - (numRows - 1) / 2);
+
+    // Get indices for positive half
+    const xStart = Math.ceil(numCols / 2);
+    const yStart = Math.ceil(numRows / 2);
+
+    const x = xFull.slice(xStart);                  // X ≥ 0
+    const y = yFull.slice(yStart);                  // Y ≥ 0
+    const z = matrixData.slice(yStart).map(row => row.slice(xStart)); // Z[y][x]
 
     const data = [{
       z: z,
       x: x,
       y: y,
-      type: 'surface'
+      type: 'surface',
+      colorscale: 'Rdbu'
     }];
 
-    Plotly.newPlot('matrix-plot', data);
+    Plotly.newPlot('matrix-plot', data, {
+      scene: {
+        xaxis: { title: 'X ≥ 0' },
+        yaxis: { title: 'Y ≥ 0' },
+        zaxis: { title: 'MTF' }
+      },
+      title: 'MTF1 - Positive Quadrant Only'
+    });
   } else {
     console.warn("matrix_modified.json not found.");
   }

@@ -47,7 +47,8 @@
 
     const elementInputs = {
       'Bundle': ['core_diameter', 'core_spacing'],
-      'Lens': ['wavelength', 'magnification','na'],
+      'Lens (Relay Optics)': ['wavelength', 'magnification','na'],
+      'Lens (Focusing Optics)': ['wavelength', 'magnification','na'],
       'Detector': ['pixel_x', 'pixel_y', 'binning']
     };
     const parameterUnits = {
@@ -87,7 +88,8 @@
             <select class="type-select" data-element="${i}">
               <option value="">-- Select --</option>
               <option value="Bundle">Bundle</option>
-              <option value="Lens">Lens</option>
+              <option value="Lens (Relay Optics)">Lens (Relay Optics)</option>
+              <option value="Lens (Focusing Optics)">Lens (Focusing Optics)</option>
               <option value="Detector">Detector</option>
             </select>
           </label>
@@ -175,9 +177,10 @@
 
   const mtfFiles = [
     { file: 'mtf1_output.json', label: 'MTF1 (Bundle)' },
-    { file: 'mtf2_output.json', label: 'MTF2 (Lens)' },
-    { file: 'mtf3_output.json', label: 'MTF3 (Detector)' },
-    { file: 'mtf4_output.json', label: 'Combined MTF' }
+    { file: 'mtf2_output.json', label: 'MTF2 (Lens Relay Optics)' },
+    { file: 'mtf3_output.json', label: 'MTF3 (Lens Focusing Optics)' },
+    { file: 'mtf4_output.json', label: 'MTF4 (Detector)' },
+    { file: 'mtf5_output.json', label: 'Combined MTF' }
   ];
 
   let currentIndex = 0;

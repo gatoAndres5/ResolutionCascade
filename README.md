@@ -89,7 +89,7 @@ npm start
 
 ---
 
-## 🗂 Project Structure
+##  Project Structure
 
 ```
 ResolutionCascade/
@@ -106,7 +106,7 @@ ResolutionCascade/
 
 ---
 
-## 📘 Python Dependencies
+##  Python Dependencies
 
 Listed in `requirements.txt`:
 
@@ -124,7 +124,7 @@ pip install -r requirements.txt
 
 ---
 
-## 🛠 Troubleshooting
+##  Troubleshooting
 
 * **Electron not recognized**: Run `npm install -g electron`
 * **Python module missing**: Run `pip install -r requirements.txt` in the virtual environment

@@ -1,5 +1,6 @@
 import json
 import math
+import os
 
 import numpy as np
 from scipy.special import j1
@@ -13,20 +14,10 @@ def create_matrix():
 
     print("Matrix saved to matrix_output.json")
 
-def doSomething():
-    result = []
-    for row_index in range(1000):
-        row = []
-        for col_index in range(1000):
-            row.append(col_index * 5)  # Multiply x-coordinate (column) by 5
-        result.append(row)
-
-    with open("matrix_modified.json", "w") as f:
-        json.dump(result, f)
-    print("Modified matrix saved to matrix_modified.json")
-
 
 def detectorMTF():
+
+    output_path = "build/mtf3_output.json"
     # Load matrix to determine dimensions
     with open("build/matrix_output.json", "r") as f:
         matrix = json.load(f)
@@ -38,9 +29,9 @@ def detectorMTF():
     with open("build/resolution_config.json", "r") as f:
         config = json.load(f)
 
-    pixel_size = 0.00454  # mm (default)
-    magnification = 1.0
-    binning = 1.0
+    pixel_size = None  # mm (default)
+    magnification = None
+    binning = None
 
     for element in config:
         if element.get("type") == "Detector":
@@ -59,6 +50,13 @@ def detectorMTF():
                 magnification = float(element.get("magnification", magnification))
             except ValueError:
                 print("Invalid magnification, using 1.")
+    
+    # If any required value is missing, skip calculation and copy matrix
+    if pixel_size is None or binning is None or magnification is None:
+        with open(output_path, "w") as f:
+            json.dump(matrix, f)
+        print("MTF3 skipped: missing config values. matrix_output.json copied as-is.")
+        return
 
     # Apply binning and magnification
     wx4 = (pixel_size * binning) / magnification
@@ -85,6 +83,7 @@ def detectorMTF():
     print("MTF3 (detector) calculation complete. Saved to mtf3_output.json.")
 
 def lensMTF():
+    output_path = "build/mtf2_output.json"
     # Load matrix to determine dimensions
     with open("build/matrix_output.json", "r") as f:
         matrix = json.load(f)
@@ -95,9 +94,9 @@ def lensMTF():
     with open("build/resolution_config.json", "r") as f:
         config = json.load(f)
 
-    wavelength = 0.000550  # default: mm
-    NA = 0.25              # default
-    magnification = 1.0    # default
+    wavelength = None
+    NA = None              
+    magnification = None  
 
     for element in config:
         if element.get("type") == "Lens":
@@ -108,6 +107,13 @@ def lensMTF():
             except ValueError:
                 print("Invalid lens config. Using defaults.")
             break
+    
+    # If any required value is missing, skip calculation and copy matrix
+    if wavelength is None or NA is None or magnification is None:
+        with open(output_path, "w") as f:
+            json.dump(matrix, f)
+        print("MTF2 skipped: missing config values. matrix_output.json copied as-is.")
+        return
 
     # Generate centered coordinate grid
     x = np.linspace(-((width - 1) / 2), ((width - 1) / 2), width)
@@ -139,6 +145,7 @@ def lensMTF():
     print("MTF2 (lens) calculation complete. Saved to mtf2_output.json.")
 
 def bundleMTF():
+    output_path = "build/mtf1_output.json"
     # Load matrix to determine dimensions
     with open("build/matrix_output.json", "r") as f:
         matrix = json.load(f)
@@ -150,19 +157,24 @@ def bundleMTF():
         config = json.load(f)
 
     # Default values
-    d_core = 0.002  # mm
-    d_spacing = 0.003  # mm
-    d_img = 0.327  # mm
+    d_core = None  # mm
+    d_spacing = None  # mm
 
     for element in config:
         if element.get("type") == "Bundle":
             try:
                 d_core = float(element.get("core_diameter", d_core))
                 d_spacing = float(element.get("core_spacing", d_spacing))
-                d_img = float(element.get("image_circle", d_img))
             except ValueError:
                 print("Invalid bundle parameters. Using defaults.")
             break
+    
+    # If any required value is missing, skip calculation and copy matrix
+    if d_core is None or d_spacing is None:
+        with open(output_path, "w") as f:
+            json.dump(matrix, f)
+        print("MTF1 skipped: missing config values. matrix_output.json copied as-is.")
+        return
 
     r_core = d_core / 2
 
@@ -193,7 +205,42 @@ def bundleMTF():
 
     print("MTF1 (bundle) calculation complete. Saved to mtf1_output.json.")
 
+def combinedMTF():
+    files = {
+        "mtf1": "build/mtf1_output.json",
+        "mtf2": "build/mtf2_output.json",
+        "mtf3": "build/mtf3_output.json"
+    }
+
+    # Check that all files exist
+    for key, path in files.items():
+        if not os.path.exists(path):
+            print(f"{key} file not found: {path}")
+            return
+
+    # Load and convert each matrix to a NumPy array
+    mtf1 = np.array(json.load(open(files["mtf1"], "r")))
+    mtf2 = np.array(json.load(open(files["mtf2"], "r")))
+    mtf3 = np.array(json.load(open(files["mtf3"], "r")))
+
+    # Ensure all matrices are the same shape
+    if not (mtf1.shape == mtf2.shape == mtf3.shape):
+        print("Error: MTF matrices are not the same shape.")
+        return
+
+    # Element-wise multiplication
+    mtf_combined = mtf1 * mtf2 * mtf3
+
+    # Save result
+    with open("build/mtf4_output.json", "w") as f:
+        json.dump(mtf_combined.tolist(), f)
+
+    print("Combined MTF saved to build/mtf4_output.json")
+
 if __name__ == "__main__":
     create_matrix()
+    bundleMTF()
+    lensMTF()
     detectorMTF()
+    combinedMTF()
 

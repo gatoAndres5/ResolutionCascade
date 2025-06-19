@@ -48,9 +48,22 @@
     const elementInputs = {
       'Bundle': ['core_diameter', 'core_spacing'],
       'Lens': ['wavelength', 'magnification','na'],
-      'Detector': ['pixel_x', 'pixel_y', 'binning'],
-      'Display': ['disp_pixel_x', 'disp_pixel_y', 'disp_binning'],
-      'Eye': ['view_dist', 'luminance']
+      'Detector': ['pixel_x', 'pixel_y', 'binning']
+    };
+    const parameterUnits = {
+      // Bundle
+      core_diameter: 'mm',
+      core_spacing: 'mm',
+
+      // Lens
+      wavelength: 'mm',
+      magnification: '×',
+      na: 'NA',
+
+      // Detector
+      pixel_x: 'mm',
+      pixel_y: 'mm',
+      binning: 'factor'
     };
 
     document.getElementById('define-elements').addEventListener('click', () => {
@@ -76,8 +89,6 @@
               <option value="Bundle">Bundle</option>
               <option value="Lens">Lens</option>
               <option value="Detector">Detector</option>
-              <option value="Display">Display</option>
-              <option value="Eye">Eye</option>
             </select>
           </label>
           <div class="element-fields" id="fields-${i}"></div>
@@ -95,15 +106,18 @@
 
         if (elementInputs[selectedType]) {
           const table = document.createElement('table');
-          table.innerHTML = `<tr><th>Parameter</th><th>Value</th></tr>`;
+          table.innerHTML = `<tr><th>Parameter</th><th>Value</th><th>Unit</th></tr>`;
           elementInputs[selectedType].forEach(name => {
             const label = name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            const unit = parameterUnits[name] || '';
             table.innerHTML += `
               <tr>
                 <td>${label}</td>
                 <td><input type="text" name="${name}" /></td>
+                <td>${unit}</td>
               </tr>`;
           });
+
           table.setAttribute('data-type', selectedType);
           fieldsContainer.appendChild(table);
         }
@@ -132,6 +146,9 @@
         const { ipcRenderer } = require('electron');
         ipcRenderer.send('save-config', configData);
         alert("Configuration sent to backend for saving!");
+
+        document.getElementById('mtf-section').classList.remove('hidden');
+        loadCurrentMTF();
       } else {
         console.warn("Not running in Electron.");
       }
@@ -139,52 +156,114 @@
   </script>
 
   <script src="renderer.js"></script>
-  <h2>3D Plot of Matrix</h2>
-<div id="matrix-plot" style="width: 800px; height: 800px;"></div>
+  <div id="mtf-section" class="hidden">
+  <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+    <button id="prev-mtf">←</button>
+    <h3 id="mtf-label" style="margin: 0;">MTF1 (Bundle)</h3>
+    <button id="next-mtf">→</button>
+
+  <!-- Circle toggle buttons -->
+  <button id="mode-3d" style="border-radius: 50%; width: 32px; height: 32px;">3D</button>
+  <button id="mode-2d" style="border-radius: 50%; width: 32px; height: 32px;">2D</button>
+</div>
+
+<div id="matrix-plot" style="width: 800px; height: 600px;"></div>
 
 <script>
   const fs = require('fs');
   const path = require('path');
 
-  const matrixPath = path.join(__dirname, 'build/mtf3_output.json');
-  if (fs.existsSync(matrixPath)) {
-    const matrixData = JSON.parse(fs.readFileSync(matrixPath));
+  const mtfFiles = [
+    { file: 'mtf1_output.json', label: 'MTF1 (Bundle)' },
+    { file: 'mtf2_output.json', label: 'MTF2 (Lens)' },
+    { file: 'mtf3_output.json', label: 'MTF3 (Detector)' },
+    { file: 'mtf4_output.json', label: 'Combined MTF' }
+  ];
 
-    const numRows = matrixData.length;
-    const numCols = matrixData[0].length;
+  let currentIndex = 0;
+  let viewMode = '3d'; // '3d' or '2d'
 
-    // Full centered axes
-    const xFull = Array.from({ length: numCols }, (_, i) => i - (numCols - 1) / 2);
-    const yFull = Array.from({ length: numRows }, (_, i) => i - (numRows - 1) / 2);
+  function loadCurrentMTF() {
+    const { file, label } = mtfFiles[currentIndex];
+    const matrixPath = path.join(__dirname, 'build', file);
+    document.getElementById('mtf-label').textContent = label;
 
-    // Get indices for positive half
-    const xStart = Math.ceil(numCols / 2);
-    const yStart = Math.ceil(numRows / 2);
+    if (fs.existsSync(matrixPath)) {
+      const matrixData = JSON.parse(fs.readFileSync(matrixPath));
+      const numRows = matrixData.length;
+      const numCols = matrixData[0].length;
 
-    const x = xFull.slice(xStart);                  // X ≥ 0
-    const y = yFull.slice(yStart);                  // Y ≥ 0
-    const z = matrixData.slice(yStart).map(row => row.slice(xStart)); // Z[y][x]
+      const xFull = Array.from({ length: numCols }, (_, i) => i - (numCols - 1) / 2);
+      const yFull = Array.from({ length: numRows }, (_, i) => i - (numRows - 1) / 2);
 
-    const data = [{
-      z: z,
-      x: x,
-      y: y,
-      type: 'surface',
-      colorscale: 'Rdbu'
-    }];
+      const xStart = Math.ceil(numCols / 2);
+      const yStart = Math.ceil(numRows / 2);
 
-    Plotly.newPlot('matrix-plot', data, {
-      scene: {
-        xaxis: { title: 'X ≥ 0' },
-        yaxis: { title: 'Y ≥ 0' },
-        zaxis: { title: 'MTF' }
-      },
-      title: 'MTF1 - Positive Quadrant Only'
-    });
-  } else {
-    console.warn("matrix_modified.json not found.");
+      const x = xFull.slice(xStart);
+      const y = yFull.slice(yStart);
+      const z = matrixData.slice(yStart).map(row => row.slice(xStart));
+
+      const data = viewMode === '3d'
+        ? [{
+            z: z,
+            x: x,
+            y: y,
+            type: 'surface',
+            colorscale: 'Rdbu'
+          }]
+        : [{
+          x: x,  // Spatial frequency (approx)
+          y: z[Math.floor(z.length / 2)],  // Mid-row slice
+          type: 'scatter',
+          mode: 'lines+markers',
+          name: 'MTF vs Spatial Frequency',
+          line: { shape: 'spline' }
+        }];
+
+      const layout = {
+        title: label,
+        ...(viewMode === '3d'
+          ? {
+              scene: {
+                xaxis: { title: 'X ≥ 0' },
+                yaxis: { title: 'Y ≥ 0' },
+                zaxis: { title: 'MTF Value' }
+              }
+            }
+          : {
+              xaxis: { title: 'X ≥ 0' },
+              yaxis: { title: 'Y ≥ 0' }
+            })
+      };
+
+      Plotly.newPlot('matrix-plot', data, layout);
+    } else {
+      console.warn(`${file} not found.`);
+    }
   }
+
+  document.getElementById('prev-mtf').addEventListener('click', () => {
+    currentIndex = (currentIndex - 1 + mtfFiles.length) % mtfFiles.length;
+    loadCurrentMTF();
+  });
+
+  document.getElementById('next-mtf').addEventListener('click', () => {
+    currentIndex = (currentIndex + 1) % mtfFiles.length;
+    loadCurrentMTF();
+  });
+
+  document.getElementById('mode-3d').addEventListener('click', () => {
+    viewMode = '3d';
+    loadCurrentMTF();
+  });
+
+  document.getElementById('mode-2d').addEventListener('click', () => {
+    viewMode = '2d';
+    loadCurrentMTF();
+  });
+
 </script>
+
 
 
 </body>

@@ -6,11 +6,11 @@
     table {
       border-collapse: collapse;
       width: 100%;
-      margin-top: 20px;
+      margin-top: 10px;
     }
     th, td {
       border: 1px solid #ccc;
-      padding: 8px;
+      padding: 6px;
     }
     th {
       text-align: left;
@@ -19,255 +19,236 @@
     .hidden {
       display: none;
     }
+    .element-row {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-top: 1rem;
+      justify-content: center;
+    }
     .element-block {
       border: 1px solid #aaa;
       padding: 10px;
-      margin-top: 20px;
+      min-width: 250px;
+      flex: 1;
+    }
+    .layout-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .image-preview {
+      margin-bottom: 1rem;
+      text-align: center;
+    }
+    .image-preview img {
+      max-height: 150px;
     }
   </style>
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-
 </head>
 <body>
-  <h1>Configuration Page</h1>
+  <h1 style="text-align: center;">Configuration Page</h1>
 
-  <label for="element-count">Enter how many elements are in your system:</label>
-  <input type="number" id="element-count" min="1" step="1" />
-  <button id="define-elements">Next</button>
+  <div class="layout-container">
+    <div class="image-preview">
+      <img id="img-mtf1" src="assets/mtf1.png" alt="MTF1 Preview">
+      <img id="img-mtf2" src="assets/mtf2.png" alt="MTF2 Preview" class="hidden">
+    </div>
 
-  <form id="config-form" class="hidden"></form>
+    <form id="config-form" class="element-row"></form>
 
-  <br>
-  <button id="generate-config" class="hidden">Generate</button>
-  <button id="go-to-home">Back to Home</button>
+    <div style="margin-top: 10px;">
+      <button id="add-focusing-lens">+ Add Focusing Optics</button>
+      <button id="remove-focusing-lens">- Remove Focusing Optics</button>
+    </div>
+    <br>
+    <div>
+      <button id="generate-config">Generate</button>
+      <button id="go-to-home">Back to Home</button>
+    </div>
+  </div>
+
+  <div id="mtf-section" class="hidden">
+    <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+      <button id="prev-mtf">←</button>
+      <h3 id="mtf-label" style="margin: 0;">MTF1 (Bundle)</h3>
+      <button id="next-mtf">→</button>
+      <button id="mode-3d" style="border-radius: 50%; width: 32px; height: 32px;">3D</button>
+      <button id="mode-2d" style="border-radius: 50%; width: 32px; height: 32px;">2D</button>
+    </div>
+    <div id="matrix-plot" style="width: 800px; height: 600px;"></div>
+  </div>
 
   <script>
-    const configForm = document.getElementById('config-form');
-    const generateBtn = document.getElementById('generate-config');
+    window.onload = () => {
+      const configForm = document.getElementById('config-form');
+      const generateBtn = document.getElementById('generate-config');
+      const addLensBtn = document.getElementById('add-focusing-lens');
+      const removeLensBtn = document.getElementById('remove-focusing-lens');
+      const imgMTF1 = document.getElementById('img-mtf1');
+      const imgMTF2 = document.getElementById('img-mtf2');
 
-    const elementInputs = {
-      'Bundle': ['core_diameter', 'core_spacing'],
-      'Lens (Relay Optics)': ['wavelength', 'magnification','na'],
-      'Lens (Focusing Optics)': ['wavelength', 'magnification','na'],
-      'Detector': ['pixel_x', 'pixel_y', 'binning']
-    };
-    const parameterUnits = {
-      // Bundle
-      core_diameter: 'mm',
-      core_spacing: 'mm',
+      const elementInputs = {
+        'Bundle': ['core_diameter', 'core_spacing'],
+        'Lens (Relay Optics)': ['wavelength', 'magnification', 'na'],
+        'Lens (Focusing Optics)': ['wavelength', 'magnification', 'na'],
+        'Detector': ['pixel_x', 'pixel_y', 'binning']
+      };
 
-      // Lens
-      wavelength: 'mm',
-      magnification: '×',
-      na: 'NA',
+      const parameterUnits = {
+        core_diameter: 'mm',
+        core_spacing: 'mm',
+        wavelength: 'mm',
+        magnification: '×',
+        na: 'NA',
+        pixel_x: 'mm',
+        pixel_y: 'mm',
+        binning: 'factor'
+      };
 
-      // Detector
-      pixel_x: 'mm',
-      pixel_y: 'mm',
-      binning: 'factor'
-    };
-
-    document.getElementById('define-elements').addEventListener('click', () => {
-      const count = parseInt(document.getElementById('element-count').value);
-      if (isNaN(count) || count <= 0) {
-        alert("Please enter a valid number greater than 0.");
-        return;
-      }
-
-      configForm.innerHTML = "";
-      configForm.classList.remove('hidden');
-      generateBtn.classList.remove('hidden');
-
-      for (let i = 1; i <= count; i++) {
+      function createBlock(type, idSuffix) {
         const block = document.createElement('div');
         block.className = 'element-block';
-        block.dataset.index = i;
-        block.innerHTML = `
-          <h3>Element ${i}</h3>
-          <label>Type:
-            <select class="type-select" data-element="${i}">
-              <option value="">-- Select --</option>
-              <option value="Bundle">Bundle</option>
-              <option value="Lens (Relay Optics)">Lens (Relay Optics)</option>
-              <option value="Lens (Focusing Optics)">Lens (Focusing Optics)</option>
-              <option value="Detector">Detector</option>
-            </select>
-          </label>
-          <div class="element-fields" id="fields-${i}"></div>
-        `;
-        configForm.appendChild(block);
-      }
-    });
+        block.innerHTML = `<h3>${type}</h3>`;
 
-    configForm.addEventListener('change', (e) => {
-      if (e.target.classList.contains('type-select')) {
-        const elementId = e.target.dataset.element;
-        const selectedType = e.target.value;
-        const fieldsContainer = document.getElementById(`fields-${elementId}`);
-        fieldsContainer.innerHTML = "";
-
-        if (elementInputs[selectedType]) {
+        if (elementInputs[type]) {
           const table = document.createElement('table');
           table.innerHTML = `<tr><th>Parameter</th><th>Value</th><th>Unit</th></tr>`;
-          elementInputs[selectedType].forEach(name => {
+          elementInputs[type].forEach(name => {
             const label = name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
             const unit = parameterUnits[name] || '';
             table.innerHTML += `
               <tr>
                 <td>${label}</td>
-                <td><input type="text" name="${name}" /></td>
+                <td><input type="text" name="${name}" data-type="${type}" /></td>
                 <td>${unit}</td>
               </tr>`;
           });
-
-          table.setAttribute('data-type', selectedType);
-          fieldsContainer.appendChild(table);
+          table.setAttribute('data-type', type);
+          block.appendChild(table);
         }
+
+        block.setAttribute('data-type', type);
+        block.setAttribute('data-id', idSuffix);
+        configForm.appendChild(block);
       }
-    });
 
-    generateBtn.addEventListener('click', () => {
-      const blocks = document.querySelectorAll('.element-block');
-      const configData = [];
-
-      blocks.forEach(block => {
-        const type = block.querySelector('.type-select').value;
-        if (!type) return;
-
-        const inputs = block.querySelectorAll('input');
-        const element = { type };
-        inputs.forEach(input => {
-          element[input.name] = input.value;
-        });
-
-        configData.push(element);
+      ['Bundle', 'Lens (Relay Optics)', 'Detector'].forEach((type, index) => {
+        createBlock(type, index);
       });
 
-      // Send configData to main process for saving
-      if (window.require) {
-        const { ipcRenderer } = require('electron');
-        ipcRenderer.send('save-config', configData);
-        alert("Configuration sent to backend for saving!");
+      let focusingCount = 0;
+      addLensBtn.addEventListener('click', () => {
+        if (!document.querySelector('[data-type="Lens (Focusing Optics)"]')) {
+          focusingCount++;
+          createBlock('Lens (Focusing Optics)', `focusing-${focusingCount}`);
+          imgMTF1.classList.add('hidden');
+          imgMTF2.classList.remove('hidden');
+        }
+      });
 
-        document.getElementById('mtf-section').classList.remove('hidden');
-        loadCurrentMTF();
-      } else {
-        console.warn("Not running in Electron.");
+      removeLensBtn.addEventListener('click', () => {
+        const focusingElement = document.querySelector('[data-type="Lens (Focusing Optics)"]');
+        if (focusingElement) {
+          focusingElement.remove();
+          imgMTF2.classList.add('hidden');
+          imgMTF1.classList.remove('hidden');
+        }
+      });
+
+      generateBtn.addEventListener('click', () => {
+        const blocks = document.querySelectorAll('.element-block');
+        const configData = [];
+
+        blocks.forEach(block => {
+          const type = block.getAttribute('data-type');
+          const inputs = block.querySelectorAll('input');
+          const element = { type };
+          inputs.forEach(input => {
+            element[input.name] = input.value;
+          });
+          configData.push(element);
+        });
+
+        if (window.require) {
+          const { ipcRenderer } = require('electron');
+          ipcRenderer.send('save-config', configData);
+          alert("Configuration sent to backend for saving!");
+          document.getElementById('mtf-section').classList.remove('hidden');
+          loadCurrentMTF();
+        } else {
+          console.warn("Not running in Electron.");
+        }
+      });
+
+      const fs = require('fs');
+      const path = require('path');
+
+      const mtfFiles = [
+        { file: 'mtf1_output.json', label: 'MTF1 (Bundle)' },
+        { file: 'mtf2_output.json', label: 'MTF2 (Lens Relay Optics)' },
+        { file: 'mtf3_output.json', label: 'MTF3 (Lens Focusing Optics)' },
+        { file: 'mtf4_output.json', label: 'MTF4 (Detector)' },
+        { file: 'mtf5_output.json', label: 'Combined MTF' }
+      ];
+
+      let currentIndex = 0;
+      let viewMode = '3d';
+
+      function loadCurrentMTF() {
+        const { file, label } = mtfFiles[currentIndex];
+        const matrixPath = path.join(__dirname, 'build', file);
+        document.getElementById('mtf-label').textContent = label;
+
+        if (fs.existsSync(matrixPath)) {
+          const matrixData = JSON.parse(fs.readFileSync(matrixPath));
+          const numRows = matrixData.length;
+          const numCols = matrixData[0].length;
+
+          const xFull = Array.from({ length: numCols }, (_, i) => i - (numCols - 1) / 2);
+          const yFull = Array.from({ length: numRows }, (_, i) => i - (numRows - 1) / 2);
+          const xStart = Math.ceil(numCols / 2);
+          const yStart = Math.ceil(numRows / 2);
+
+          const x = xFull.slice(xStart);
+          const y = yFull.slice(yStart);
+          const z = matrixData.slice(yStart).map(row => row.slice(xStart));
+
+          const data = viewMode === '3d'
+            ? [{ z, x, y, type: 'surface', colorscale: 'Rdbu' }]
+            : [{ x, y: z[Math.floor(z.length / 2)], type: 'scatter', mode: 'lines+markers', name: 'MTF vs Spatial Frequency', line: { shape: 'spline' } }];
+
+          const layout = viewMode === '3d'
+            ? { scene: { xaxis: { title: 'X ≥ 0' }, yaxis: { title: 'Y ≥ 0' }, zaxis: { title: 'MTF Value' } }, title: label }
+            : { xaxis: { title: 'X ≥ 0' }, yaxis: { title: 'MTF Value' }, title: label };
+
+          Plotly.newPlot('matrix-plot', data, layout);
+        } else {
+          console.warn(`${file} not found.`);
+        }
       }
-    });
+
+      document.getElementById('prev-mtf').addEventListener('click', () => {
+        currentIndex = (currentIndex - 1 + mtfFiles.length) % mtfFiles.length;
+        loadCurrentMTF();
+      });
+
+      document.getElementById('next-mtf').addEventListener('click', () => {
+        currentIndex = (currentIndex + 1) % mtfFiles.length;
+        loadCurrentMTF();
+      });
+
+      document.getElementById('mode-3d').addEventListener('click', () => {
+        viewMode = '3d';
+        loadCurrentMTF();
+      });
+
+      document.getElementById('mode-2d').addEventListener('click', () => {
+        viewMode = '2d';
+        loadCurrentMTF();
+      });
+    };
   </script>
-
-  <script src="renderer.js"></script>
-  <div id="mtf-section" class="hidden">
-  <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
-    <button id="prev-mtf">←</button>
-    <h3 id="mtf-label" style="margin: 0;">MTF1 (Bundle)</h3>
-    <button id="next-mtf">→</button>
-
-  <!-- Circle toggle buttons -->
-  <button id="mode-3d" style="border-radius: 50%; width: 32px; height: 32px;">3D</button>
-  <button id="mode-2d" style="border-radius: 50%; width: 32px; height: 32px;">2D</button>
-</div>
-
-<div id="matrix-plot" style="width: 800px; height: 600px;"></div>
-
-<script>
-  const fs = require('fs');
-  const path = require('path');
-
-  const mtfFiles = [
-    { file: 'mtf1_output.json', label: 'MTF1 (Bundle)' },
-    { file: 'mtf2_output.json', label: 'MTF2 (Lens Relay Optics)' },
-    { file: 'mtf3_output.json', label: 'MTF3 (Lens Focusing Optics)' },
-    { file: 'mtf4_output.json', label: 'MTF4 (Detector)' },
-    { file: 'mtf5_output.json', label: 'Combined MTF' }
-  ];
-
-  let currentIndex = 0;
-  let viewMode = '3d'; // '3d' or '2d'
-
-  function loadCurrentMTF() {
-    const { file, label } = mtfFiles[currentIndex];
-    const matrixPath = path.join(__dirname, 'build', file);
-    document.getElementById('mtf-label').textContent = label;
-
-    if (fs.existsSync(matrixPath)) {
-      const matrixData = JSON.parse(fs.readFileSync(matrixPath));
-      const numRows = matrixData.length;
-      const numCols = matrixData[0].length;
-
-      const xFull = Array.from({ length: numCols }, (_, i) => i - (numCols - 1) / 2);
-      const yFull = Array.from({ length: numRows }, (_, i) => i - (numRows - 1) / 2);
-
-      const xStart = Math.ceil(numCols / 2);
-      const yStart = Math.ceil(numRows / 2);
-
-      const x = xFull.slice(xStart);
-      const y = yFull.slice(yStart);
-      const z = matrixData.slice(yStart).map(row => row.slice(xStart));
-
-      const data = viewMode === '3d'
-        ? [{
-            z: z,
-            x: x,
-            y: y,
-            type: 'surface',
-            colorscale: 'Rdbu'
-          }]
-        : [{
-          x: x,  // Spatial frequency (approx)
-          y: z[Math.floor(z.length / 2)],  // Mid-row slice
-          type: 'scatter',
-          mode: 'lines+markers',
-          name: 'MTF vs Spatial Frequency',
-          line: { shape: 'spline' }
-        }];
-
-      const layout = {
-        title: label,
-        ...(viewMode === '3d'
-          ? {
-              scene: {
-                xaxis: { title: 'X ≥ 0' },
-                yaxis: { title: 'Y ≥ 0' },
-                zaxis: { title: 'MTF Value' }
-              }
-            }
-          : {
-              xaxis: { title: 'X ≥ 0' },
-              yaxis: { title: 'Y ≥ 0' }
-            })
-      };
-
-      Plotly.newPlot('matrix-plot', data, layout);
-    } else {
-      console.warn(`${file} not found.`);
-    }
-  }
-
-  document.getElementById('prev-mtf').addEventListener('click', () => {
-    currentIndex = (currentIndex - 1 + mtfFiles.length) % mtfFiles.length;
-    loadCurrentMTF();
-  });
-
-  document.getElementById('next-mtf').addEventListener('click', () => {
-    currentIndex = (currentIndex + 1) % mtfFiles.length;
-    loadCurrentMTF();
-  });
-
-  document.getElementById('mode-3d').addEventListener('click', () => {
-    viewMode = '3d';
-    loadCurrentMTF();
-  });
-
-  document.getElementById('mode-2d').addEventListener('click', () => {
-    viewMode = '2d';
-    loadCurrentMTF();
-  });
-
-</script>
-
-
-
 </body>
 </html>

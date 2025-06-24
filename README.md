@@ -1,57 +1,83 @@
 
 #  Resolution Cascade
 
-
----
-
 ##  Requirements
 
 ###  Python
-- **Version:** Python 3.7 or higher
-- **Package Manager:** `pip` (comes with Python)
-- **Virtual Environments:** `venv` (recommended)
+- **Version:** Python 3.7 or higher  
+- **Package Manager:** `pip` (included with Python)  
+- **Virtual Environments:** `venv` (recommended for project isolation)  
 
- **Install Python:**
-- [Windows/macOS/Linux Installer](https://www.python.org/downloads/)
--  Make sure to check **"Add Python to PATH"** during installation on Windows.
+** How to Install Python:**
+- Go to [python.org/downloads](https://www.python.org/downloads/)
+- Download the installer for your operating system (Windows/macOS/Linux)
+- ** Important (Windows only):** During installation, make sure to check the box that says **“Add Python to PATH”**
+
+** Verify Installation:**
+
+```bash
+python --version
+pip --version
+````
 
 ---
 
-###  Node.js
-- **Version:** Node.js v16+ recommended
-- **Package Manager:** `npm` (included with Node.js)
-- **Electron:** Install manually via npm
+###  Node.js + Electron
 
- **Install Node.js:**
-- [Node.js Download Page](https://nodejs.org/)
-- Use the **LTS version** for stability.
+* **Version:** Node.js v16 or newer (LTS recommended)
+* **Package Manager:** `npm` (comes with Node.js)
+* **Electron:** Installed manually via `npm`
+
+** How to Install Node.js:**
+
+* Visit [nodejs.org](https://nodejs.org/)
+* Download and install the **LTS version**
+* Restart your terminal afterward
+
+** Verify Installation:**
+
+```bash
+node --version
+npm --version
+```
 
 ---
 
 ##  Installation & Setup
 
-### 1. Clone the Repository
+> These instructions assume you are using a terminal (Command Prompt, PowerShell, or Bash).
+
+###  1. Clone the Project Repository
+
+>  **New to Git?** Download it from [git-scm.com](https://git-scm.com/) and choose default settings during install.
 
 ```bash
 git clone https://github.com/gatoAndres5/ResolutionCascade.git
 cd ResolutionCascade
-````
+```
 
 ---
 
 ### 2. Set Up Python Environment
 
 ```bash
-# Create a virtual environment
+# Create a virtual environment named 'venv'
 python -m venv venv
+```
 
-# Activate it
+**Activate it:**
+
+```bash
 # On Windows:
 venv\Scripts\activate
+
 # On macOS/Linux:
 source venv/bin/activate
+```
 
-# Install Python dependencies
+You should see `(venv)` appear in your terminal. Now install required packages:
+
+```bash
 pip install -r requirements.txt
 ```
 
@@ -60,10 +86,13 @@ pip install -r requirements.txt
 ### 3. Set Up Electron
 
 ```bash
-# Install Node.js dependencies
+# Install Node.js dependencies from package.json
 npm install
+```
 
-# (If you get 'electron' not found, install globally)
+>  If you see `'electron' is not recognized as a command`, run:
+
+```bash
 npm install -g electron
 ```
 
@@ -75,7 +104,29 @@ npm install -g electron
 npm start
 ```
 
+This should launch the Electron desktop app.
+
 ---
+
+## Terminal Tips 
+
+* **`cd folder-name`** → change into a folder
+* **`ls`** or **`dir`** → list files in a folder
+* **`mkdir folder-name`** → make a new folder
+* If your terminal gets stuck, press **Ctrl+C** to cancel a command
+* To rerun the app later, make sure to re-activate the virtual environment
+
+---
+
+##  Having Issues?
+
+* Make sure Python and Node are installed properly (`--version` commands)
+* Restart your terminal after installing new software
+* Always activate your `venv` before running Python commands
+
+---
+
+
 
 ## Usage Flow
 

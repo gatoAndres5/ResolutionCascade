@@ -88,6 +88,17 @@
       const removeLensBtn = document.getElementById('remove-focusing-lens');
       const imgMTF1 = document.getElementById('img-mtf1');
       const imgMTF2 = document.getElementById('img-mtf2');
+      const goHomeBtn = document.getElementById('go-to-home');
+
+      goHomeBtn.addEventListener('click', () => {
+        if (window.require) {
+          const { ipcRenderer } = require('electron');
+          ipcRenderer.send('navigate-to-home');
+        } else {
+          // Fallback: navigate to index.html in browser
+          window.location.href = "index.html";
+        }
+      });
 
       const elementInputs = {
         'Bundle': ['core_diameter', 'core_spacing'],
@@ -249,6 +260,8 @@
         loadCurrentMTF();
       });
     };
+
+    
   </script>
 </body>
 </html>

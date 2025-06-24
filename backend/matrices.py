@@ -257,6 +257,9 @@ def bundleMTF():
 
     r_core = d_core / 2
 
+    x_samp = d_spacing / 2
+    y_samp = (np.sqrt(3) * d_spacing) / 2
+
     # Coordinate grid centered at 0
     x = np.linspace(-((width - 1) / 2), ((width - 1) / 2), width)
     y = np.linspace(-((height - 1) / 2), ((height - 1) / 2), height)
@@ -264,22 +267,23 @@ def bundleMTF():
     Xi, Eta = np.meshgrid(x, y)
     P = np.sqrt(Xi**2 + Eta**2)
 
-    # Avoid divide-by-zero at center (0,0)
-    argument = np.pi * r_core * P
-    denominator = argument
-    with np.errstate(divide='ignore', invalid='ignore'):
-        bessel_term = j1(argument)
-        MTF1 = (np.pi * r_core**2) * (bessel_term / denominator)
+     # Sampling pattern
+    sampling = np.abs(np.sinc(Xi * x_samp) * np.sinc(Eta * y_samp))
 
-    # Normalize and fix NaN at center
-    MTF1 = np.nan_to_num(MTF1, nan=1.0)
-    MTF1 = np.abs(MTF1)
+    # Fiber pattern
+    P = np.sqrt(Xi**2 + Eta**2)
+    argument = np.pi * d_core * P
+    with np.errstate(divide='ignore', invalid='ignore'):
+        fiber = np.abs(2 * j1(argument) / argument)
+        fiber = np.nan_to_num(fiber, nan=1.0)
+
+    # Final MTF1
+    MTF1 = sampling * fiber
     max_val = np.max(MTF1)
     if max_val != 0:
         MTF1 /= max_val
 
-    # Save output
-    with open("build/mtf1_output.json", "w") as f:
+    with open(output_path, "w") as f:
         json.dump(MTF1.tolist(), f)
 
     print("MTF1 (bundle) calculation complete. Saved to mtf1_output.json.")

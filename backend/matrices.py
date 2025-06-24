@@ -218,78 +218,73 @@ def lensFocusingMTF():
 
     print("MTF3 (lens) calculation complete. Saved to mtf3_output.json.")
 
+
 def bundleMTF():
-    # Ensure build directory exists
-    os.makedirs("build", exist_ok=True)
-    
     output_path = "build/mtf1_output.json"
-    # Load matrix to determine dimensions
+
     with open("build/matrix_output.json", "r") as f:
         matrix = json.load(f)
     height = len(matrix)
     width = len(matrix[0])
 
-    # Load bundle parameters from config
     with open("build/resolution_config.json", "r") as f:
         config = json.load(f)
 
-    # Default values
-    d_core = None  # mm
-    d_spacing = None  # mm
-
+    d_core = d_spacing = None
     for element in config:
         if element.get("type") == "Bundle":
             try:
-                d_core = float(element.get("core_diameter", d_core))
-                d_spacing = float(element.get("core_spacing", d_spacing))
-            except ValueError:
-                print("Invalid bundle parameters. Using defaults.")
+                d_core = float(element["core_diameter"])
+                d_spacing = float(element["core_spacing"])
+            except (ValueError, KeyError):
+                print("Invalid bundle parameters.")
             break
-    
-    # If any required value is missing, skip calculation and output a matrix of all 1s
-    if d_core is None or d_spacing is None:
-        height = len(matrix)
-        width = len(matrix[0]) if height > 0 else 0
-        ones_matrix = [[1.0 for _ in range(width)] for _ in range(height)]
 
+    if d_core is None or d_spacing is None:
+        ones_matrix = [[1.0 for _ in range(width)] for _ in range(height)]
         with open(output_path, "w") as f:
             json.dump(ones_matrix, f)
         print("MTF1 skipped: missing config values. Output is a matrix of all 1s.")
         return
-    
 
-    r_core = d_core / 2
+    # Frequency domain coordinates (cycles/mm)
+    freq_x = np.linspace(-0.5, 0.5, width) * width  # normalized frequencies
+    freq_y = np.linspace(-0.5, 0.5, height) * height
 
+    Xi, Eta = np.meshgrid(freq_x, freq_y)
+    R = np.sqrt(Xi**2 + Eta**2)
+
+    # Sampling component
     x_samp = d_spacing / 2
     y_samp = (np.sqrt(3) * d_spacing) / 2
-
-    # Coordinate grid centered at 0
-    x = np.linspace(-((width - 1) / 2), ((width - 1) / 2), width)
-    y = np.linspace(-((height - 1) / 2), ((height - 1) / 2), height)
-
-    Xi, Eta = np.meshgrid(x, y)
-    P = np.sqrt(Xi**2 + Eta**2)
-
-     # Sampling pattern
     sampling = np.abs(np.sinc(Xi * x_samp) * np.sinc(Eta * y_samp))
 
-    # Fiber pattern
-    P = np.sqrt(Xi**2 + Eta**2)
-    argument = np.pi * d_core * P
+    # Fiber component (somb)
+    argument = np.pi * d_core * R
     with np.errstate(divide='ignore', invalid='ignore'):
         fiber = np.abs(2 * j1(argument) / argument)
         fiber = np.nan_to_num(fiber, nan=1.0)
 
-    # Final MTF1
+    # Combine and normalize
     MTF1 = sampling * fiber
-    max_val = np.max(MTF1)
-    if max_val != 0:
-        MTF1 /= max_val
+    MTF1 = np.nan_to_num(MTF1)
+
+    # ⚠️ Don't use max — normalize by DC (center) value
+    center_y = height // 2
+    center_x = width // 2
+    dc_value = MTF1[center_y, center_x]
+
+    if dc_value > 0:
+        MTF1 /= dc_value
+
 
     with open(output_path, "w") as f:
         json.dump(MTF1.tolist(), f)
 
     print("MTF1 (bundle) calculation complete. Saved to mtf1_output.json.")
+
+
+
 
 def combinedMTF():
     files = {

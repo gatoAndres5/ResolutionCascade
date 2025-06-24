@@ -237,13 +237,20 @@
       const row = z[Math.floor(z.length / 2)];
       const col = z.map(r => r[Math.floor(r.length / 2)]);
 
+      // Normalize both slices to 1 at DC (first element)
+      const rowCenter = row[0] || 1;
+      const colCenter = col[0] || 1;
+      const rowNorm = row.map(v => v / rowCenter);
+      const colNorm = col.map(v => v / colCenter);
+
+
       data = [];
 
       // For MTF1 (Bundle), add two directional lines
       if (file === 'mtf1_output.json') {
         data.push({
           x,
-          y: row,
+          y: rowNorm,
           type: 'scatter',
           mode: 'lines+markers',
           name: 'ξ direction',
@@ -252,12 +259,13 @@
 
         data.push({
           x,
-          y: col,
+          y: colNorm,
           type: 'scatter',
           mode: 'lines+markers',
           name: 'η direction',
           line: { shape: 'spline', color: 'red' }
         });
+
       } else {
         // Normal single direction for other components
         data.push({

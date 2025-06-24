@@ -226,19 +226,71 @@
           const y = yFull.slice(yStart);
           const z = matrixData.slice(yStart).map(row => row.slice(xStart));
 
-          const data = viewMode === '3d'
-            ? [{ z, x, y, type: 'surface', colorscale: 'Rdbu' }]
-            : [{ x, y: z[Math.floor(z.length / 2)], type: 'scatter', mode: 'lines+markers', name: 'MTF vs Spatial Frequency', line: { shape: 'spline' } }];
+          let data;
+    if (viewMode === '3d') {
+      data = [{
+        z, x, y,
+        type: 'surface',
+        colorscale: 'Rdbu'
+      }];
+    } else {
+      const row = z[Math.floor(z.length / 2)];
+      const col = z.map(r => r[Math.floor(r.length / 2)]);
 
-          const layout = viewMode === '3d'
-            ? { scene: { xaxis: { title: 'X ≥ 0' }, yaxis: { title: 'Y ≥ 0' }, zaxis: { title: 'MTF Value' } }, title: label }
-            : { xaxis: { title: 'X ≥ 0' }, yaxis: { title: 'MTF Value' }, title: label };
+      data = [];
 
-          Plotly.newPlot('matrix-plot', data, layout);
-        } else {
-          console.warn(`${file} not found.`);
-        }
+      // For MTF1 (Bundle), add two directional lines
+      if (file === 'mtf1_output.json') {
+        data.push({
+          x,
+          y: row,
+          type: 'scatter',
+          mode: 'lines+markers',
+          name: 'ξ direction',
+          line: { shape: 'spline', color: 'blue' }
+        });
+
+        data.push({
+          x,
+          y: col,
+          type: 'scatter',
+          mode: 'lines+markers',
+          name: 'η direction',
+          line: { shape: 'spline', color: 'red' }
+        });
+      } else {
+        // Normal single direction for other components
+        data.push({
+          x,
+          y: row,
+          type: 'scatter',
+          mode: 'lines+markers',
+          name: 'MTF vs Spatial Frequency',
+          line: { shape: 'spline' }
+        });
       }
+    }
+
+        const layout = viewMode === '3d'
+          ? {
+              scene: {
+                xaxis: { title: 'X ≥ 0' },
+                yaxis: { title: 'Y ≥ 0' },
+                zaxis: { title: 'MTF Value' }
+              },
+              title: label
+            }
+          : {
+              xaxis: { title: 'Frequency (cycles/mm)' },
+              yaxis: { title: 'MTF' },
+              title: label
+            };
+
+        Plotly.newPlot('matrix-plot', data, layout);
+      } else {
+        console.warn(`${file} not found.`);
+      }
+    }
 
       document.getElementById('prev-mtf').addEventListener('click', () => {
         currentIndex = (currentIndex - 1 + mtfFiles.length) % mtfFiles.length;

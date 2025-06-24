@@ -219,6 +219,9 @@ def lensFocusingMTF():
     print("MTF3 (lens) calculation complete. Saved to mtf3_output.json.")
 
 def bundleMTF():
+    # Ensure build directory exists
+    os.makedirs("build", exist_ok=True)
+    
     output_path = "build/mtf1_output.json"
     # Load matrix to determine dimensions
     with open("build/matrix_output.json", "r") as f:

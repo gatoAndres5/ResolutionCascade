@@ -3,11 +3,14 @@ import math
 import os
 
 import numpy as np
-from scipy.special import j1
+from scipy.special import jv
 
 
 def create_matrix():
     matrix = [[0 for _ in range(1000)] for _ in range(1000)]
+    print("Current working directory:", os.getcwd())
+    # Make build dir
+    os.makedirs("build", exist_ok=True)
     # Save to JSON file
     with open("build/matrix_output.json", "w") as f:
         json.dump(matrix, f)
@@ -222,69 +225,82 @@ def lensFocusingMTF():
 def bundleMTF():
     output_path = "build/mtf1_output.json"
 
+    # Load matrix to determine shape
     with open("build/matrix_output.json", "r") as f:
         matrix = json.load(f)
     height = len(matrix)
     width = len(matrix[0])
 
+    # Load config
     with open("build/resolution_config.json", "r") as f:
         config = json.load(f)
 
     d_core = d_spacing = None
-    for element in config:
-        if element.get("type") == "Bundle":
+    for item in config:
+        if item.get("type") == "Bundle":
             try:
-                d_core = float(element["core_diameter"])
-                d_spacing = float(element["core_spacing"])
+                d_core = float(item["core_diameter"])
+                d_spacing = float(item["core_spacing"])
             except (ValueError, KeyError):
                 print("Invalid bundle parameters.")
             break
 
     if d_core is None or d_spacing is None:
-        ones_matrix = [[1.0 for _ in range(width)] for _ in range(height)]
+        ones = [[1.0 for _ in range(width)] for _ in range(height)]
         with open(output_path, "w") as f:
-            json.dump(ones_matrix, f)
-        print("MTF1 skipped: missing config values. Output is a matrix of all 1s.")
+            json.dump(ones, f)
+        print("⚠️ Missing bundle values. Output is all 1s.")
         return
 
-    # Frequency domain coordinates (cycles/mm)
-    freq_x = np.linspace(-0.5, 0.5, width) * width  # normalized frequencies
-    freq_y = np.linspace(-0.5, 0.5, height) * height
+    # Frequency grid [-250, 250] to match your working test
+    freq_vals = np.linspace(-250, 250, width)
+    Xi, Eta = np.meshgrid(freq_vals, freq_vals)
 
-    Xi, Eta = np.meshgrid(freq_x, freq_y)
-    R = np.sqrt(Xi**2 + Eta**2)
+    # --- MTF computation (EXACTLY as in your test) ---
+    theta = np.deg2rad(60)
+    u = Xi * np.cos(theta) + Eta * np.sin(theta)
+    x_samp = d_spacing
+    y_samp = np.sqrt(3) * d_spacing
+    u_samp = d_spacing
 
-    # Sampling component
-    x_samp = d_spacing / 2
-    y_samp = (np.sqrt(3) * d_spacing) / 2
-    sampling = np.abs(np.sinc(Xi * x_samp) * np.sinc(Eta * y_samp))
+    P = np.sqrt(Xi**2 + Eta**2)
 
-    # Fiber component (somb)
-    argument = np.pi * d_core * R
+    sampling = np.abs(
+        np.sinc(Xi * x_samp) *
+        np.sinc(Eta * y_samp) *
+        np.sinc(u * u_samp)
+    )
+
+    argument = np.pi * d_core * P
     with np.errstate(divide='ignore', invalid='ignore'):
-        fiber = np.abs(2 * j1(argument) / argument)
-        fiber = np.nan_to_num(fiber, nan=1.0)
+        fiber = np.abs(2 * jv(1, argument) / argument)
+        fiber[np.isnan(fiber)] = 1
 
-    # Combine and normalize
     MTF1 = sampling * fiber
-    MTF1 = np.nan_to_num(MTF1)
+    MTF1 = np.nan_to_num(MTF1, nan=1.0)
 
-    # ⚠️ Don't use max — normalize by DC (center) value
-    center_y = height // 2
-    center_x = width // 2
-    dc_value = MTF1[center_y, center_x]
-
+    # Normalize to DC
+    dc_value = MTF1[height // 2, width // 2]
     if dc_value > 0:
         MTF1 /= dc_value
 
-
+    # Save output
     with open(output_path, "w") as f:
         json.dump(MTF1.tolist(), f)
 
-    print("MTF1 (bundle) calculation complete. Saved to mtf1_output.json.")
+    print("✅ MTF1 (bundle) written to", output_path)
 
+    # === Print diagnostic values (exact same as test) ===
+    center_idx = width // 2
+    xi_slice = MTF1[center_idx, center_idx:]   # ξ direction (row)
+    eta_slice = MTF1[center_idx:, center_idx]  # η direction (col)
+    freqs = freq_vals[center_idx:]             # Positive freqs only
 
-
+    target_freqs = [50, 100, 150, 200, 250]
+    print("📊 MTF Values (Bundle):")
+    for f in target_freqs:
+        idx = np.argmin(np.abs(freqs - f))
+        print(f"  Frequency {f:>3} cycles/mm → ξ (E): {xi_slice[idx]:.4f}, η (N): {eta_slice[idx]:.4f}")
 
 def combinedMTF():
     files = {

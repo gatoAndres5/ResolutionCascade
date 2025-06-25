@@ -30,10 +30,19 @@ app.whenReady().then(() => {
   });
 
   ipcMain.on('save-config', (event, configData) => {
-    const filePath = path.join(__dirname, 'build/resolution_config.json');
+    const buildDir = path.join(__dirname, 'build');
+    const filePath = path.join(buildDir, 'resolution_config.json');
+
+    //  Ensure build directory exists
+    if (!fs.existsSync(buildDir)) {
+      fs.mkdirSync(buildDir, { recursive: true });
+    }
+
+    //  Save config file
     fs.writeFileSync(filePath, JSON.stringify(configData, null, 2));
     console.log("Configuration saved to:", filePath);
 
+    //  Run Python process
     const pythonProcess = spawn('python', [path.join(__dirname, 'backend/matrices.py'), filePath]);
 
     pythonProcess.stdout.on('data', (data) => {
@@ -41,12 +50,12 @@ app.whenReady().then(() => {
     });
 
     pythonProcess.stderr.on('data', (data) => {
-      console.error(`[Python ERROR] ${data}`);
+      console.error(`[Python Error] ${data}`);
     });
 
     pythonProcess.on('close', (code) => {
       console.log(`Python process exited with code ${code}`);
     });
-  });
+});
   
 });

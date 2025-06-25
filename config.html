@@ -208,45 +208,52 @@
       let viewMode = '3d';
 
       function loadCurrentMTF() {
-        const { file, label } = mtfFiles[currentIndex];
-        const matrixPath = path.join(__dirname, 'build', file);
-        document.getElementById('mtf-label').textContent = label;
+  const { file, label } = mtfFiles[currentIndex];
+  const matrixPath = path.join(__dirname, 'build', file);
+  document.getElementById('mtf-label').textContent = label;
 
-        if (fs.existsSync(matrixPath)) {
-          const matrixData = JSON.parse(fs.readFileSync(matrixPath));
-          const numRows = matrixData.length;
-          const numCols = matrixData[0].length;
+  if (fs.existsSync(matrixPath)) {
+    const matrixData = JSON.parse(fs.readFileSync(matrixPath));
+    const numRows = matrixData.length;
+    const numCols = matrixData[0].length;
 
-          const xFull = Array.from({ length: numCols }, (_, i) => i - (numCols - 1) / 2);
-          const yFull = Array.from({ length: numRows }, (_, i) => i - (numRows - 1) / 2);
-          const xStart = Math.ceil(numCols / 2);
-          const yStart = Math.ceil(numRows / 2);
+    // Frequency range matches Python meshgrid: [-250, 250] for both axes
+    const linspace = (start, stop, num) => {
+      const step = (stop - start) / (num - 1);
+      return Array.from({ length: num }, (_, i) => start + i * step);
+    };
 
-          const x = xFull.slice(xStart);
-          const y = yFull.slice(yStart);
-          const z = matrixData.slice(yStart).map(row => row.slice(xStart));
+    const freqMin = -250;
+    const freqMax = 250;
+    const xFull = linspace(freqMin, freqMax, numCols);
+    const yFull = linspace(freqMin, freqMax, numRows);
 
-          let data;
+    const centerRow = Math.floor(numRows / 2);
+    const centerCol = Math.floor(numCols / 2);
+
+    const x = xFull.slice(centerCol);  // ξ direction (row)
+    const y = yFull.slice(centerRow);  // η direction (column)
+
+    const row = matrixData[centerRow].slice(centerCol);               // ξ
+    const col = matrixData.slice(centerRow).map(r => r[centerCol]);   // η
+
+    const rowDC = row[0] || 1;
+    const colDC = col[0] || 1;
+    const rowNorm = row.map(v => v / rowDC);
+    const colNorm = col.map(v => v / colDC);
+
+    let data = [];
+
     if (viewMode === '3d') {
+      const z = matrixData.slice(centerRow).map(row => row.slice(centerCol));
       data = [{
-        z, x, y,
+        z,
+        x,
+        y,
         type: 'surface',
         colorscale: 'Rdbu'
       }];
     } else {
-      const row = z[Math.floor(z.length / 2)];
-      const col = z.map(r => r[Math.floor(r.length / 2)]);
-
-      // Normalize both slices to 1 at DC (first element)
-      const rowCenter = row[0] || 1;
-      const colCenter = col[0] || 1;
-      const rowNorm = row.map(v => v / rowCenter);
-      const colNorm = col.map(v => v / colCenter);
-
-
-      data = [];
-
-      // For MTF1 (Bundle), add two directional lines
       if (file === 'mtf1_output.json') {
         data.push({
           x,
@@ -265,12 +272,10 @@
           name: 'η direction',
           line: { shape: 'spline', color: 'red' }
         });
-
       } else {
-        // Normal single direction for other components
         data.push({
           x,
-          y: row,
+          y: rowNorm,
           type: 'scatter',
           mode: 'lines+markers',
           name: 'MTF vs Spatial Frequency',
@@ -279,26 +284,29 @@
       }
     }
 
-        const layout = viewMode === '3d'
-          ? {
-              scene: {
-                xaxis: { title: 'X ≥ 0' },
-                yaxis: { title: 'Y ≥ 0' },
-                zaxis: { title: 'MTF Value' }
-              },
-              title: label
-            }
-          : {
-              xaxis: { title: 'Frequency (cycles/mm)' },
-              yaxis: { title: 'MTF' },
-              title: label
-            };
+    const layout = viewMode === '3d'
+      ? {
+          scene: {
+            xaxis: { title: 'X (cycles/mm)' },
+            yaxis: { title: 'Y (cycles/mm)' },
+            zaxis: { title: 'MTF Value' }
+          },
+          title: label
+        }
+      : {
+          xaxis: {
+            title: 'Frequency (cycles/mm)',
+            range: [0, 250],
+            dtick: 50,
+          },
+          yaxis: { title: 'MTF' },
+          title: label
+        };
 
-        Plotly.newPlot('matrix-plot', data, layout);
-      } else {
-        console.warn(`${file} not found.`);
-      }
-    }
+    Plotly.newPlot('matrix-plot', data, layout);
+  } else {
+    console.warn(`${file} not found.`);
+  }}
 
       document.getElementById('prev-mtf').addEventListener('click', () => {
         currentIndex = (currentIndex - 1 + mtfFiles.length) % mtfFiles.length;

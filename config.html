@@ -79,257 +79,252 @@
     </div>
     <div id="matrix-plot" style="width: 800px; height: 600px;"></div>
   </div>
+  <div style="margin-top: 1rem;">
+  <button id="export-csv">Export to CSV</button>
+  </div>
+
 
   <script>
-    window.onload = () => {
-      const configForm = document.getElementById('config-form');
-      const generateBtn = document.getElementById('generate-config');
-      const addLensBtn = document.getElementById('add-focusing-lens');
-      const removeLensBtn = document.getElementById('remove-focusing-lens');
-      const imgMTF1 = document.getElementById('img-mtf1');
-      const imgMTF2 = document.getElementById('img-mtf2');
-      const goHomeBtn = document.getElementById('go-to-home');
+  window.onload = () => {
+    const configForm = document.getElementById('config-form');
+    const generateBtn = document.getElementById('generate-config');
+    const addLensBtn = document.getElementById('add-focusing-lens');
+    const removeLensBtn = document.getElementById('remove-focusing-lens');
+    const imgMTF1 = document.getElementById('img-mtf1');
+    const imgMTF2 = document.getElementById('img-mtf2');
+    const goHomeBtn = document.getElementById('go-to-home');
 
-      goHomeBtn.addEventListener('click', () => {
-        if (window.require) {
-          const { ipcRenderer } = require('electron');
-          ipcRenderer.send('navigate-to-home');
-        } else {
-          // Fallback: navigate to index.html in browser
-          window.location.href = "index.html";
-        }
-      });
+    let rowNorm = [];
+    let colNorm = [];
+    let x = [];
+    let currentLabel = "";
 
-      const elementInputs = {
-        'Bundle': ['core_diameter', 'core_spacing'],
-        'Lens (Relay Optics)': ['wavelength', 'magnification', 'na'],
-        'Lens (Focusing Optics)': ['wavelength', 'magnification', 'na'],
-        'Detector': ['pixel_x', 'pixel_y', 'binning']
-      };
-
-      const parameterUnits = {
-        core_diameter: 'mm',
-        core_spacing: 'mm',
-        wavelength: 'mm',
-        magnification: '×',
-        na: 'NA',
-        pixel_x: 'mm',
-        pixel_y: 'mm',
-        binning: 'factor'
-      };
-
-      function createBlock(type, idSuffix) {
-        const block = document.createElement('div');
-        block.className = 'element-block';
-        block.innerHTML = `<h3>${type}</h3>`;
-
-        if (elementInputs[type]) {
-          const table = document.createElement('table');
-          table.innerHTML = `<tr><th>Parameter</th><th>Value</th><th>Unit</th></tr>`;
-          elementInputs[type].forEach(name => {
-            const label = name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-            const unit = parameterUnits[name] || '';
-            table.innerHTML += `
-              <tr>
-                <td>${label}</td>
-                <td><input type="text" name="${name}" data-type="${type}" /></td>
-                <td>${unit}</td>
-              </tr>`;
-          });
-          table.setAttribute('data-type', type);
-          block.appendChild(table);
-        }
-
-        block.setAttribute('data-type', type);
-        block.setAttribute('data-id', idSuffix);
-        configForm.appendChild(block);
+    goHomeBtn.addEventListener('click', () => {
+      if (window.require) {
+        const { ipcRenderer } = require('electron');
+        ipcRenderer.send('navigate-to-home');
+      } else {
+        window.location.href = "index.html";
       }
+    });
 
-      ['Bundle', 'Lens (Relay Optics)', 'Detector'].forEach((type, index) => {
-        createBlock(type, index);
-      });
-
-      let focusingCount = 0;
-      addLensBtn.addEventListener('click', () => {
-        if (!document.querySelector('[data-type="Lens (Focusing Optics)"]')) {
-          focusingCount++;
-          createBlock('Lens (Focusing Optics)', `focusing-${focusingCount}`);
-          imgMTF1.classList.add('hidden');
-          imgMTF2.classList.remove('hidden');
-        }
-      });
-
-      removeLensBtn.addEventListener('click', () => {
-        const focusingElement = document.querySelector('[data-type="Lens (Focusing Optics)"]');
-        if (focusingElement) {
-          focusingElement.remove();
-          imgMTF2.classList.add('hidden');
-          imgMTF1.classList.remove('hidden');
-        }
-      });
-
-      generateBtn.addEventListener('click', () => {
-        const blocks = document.querySelectorAll('.element-block');
-        const configData = [];
-
-        blocks.forEach(block => {
-          const type = block.getAttribute('data-type');
-          const inputs = block.querySelectorAll('input');
-          const element = { type };
-          inputs.forEach(input => {
-            element[input.name] = input.value;
-          });
-          configData.push(element);
-        });
-
-        if (window.require) {
-          const { ipcRenderer } = require('electron');
-          ipcRenderer.send('save-config', configData);
-          alert("Configuration sent to backend for saving!");
-          document.getElementById('mtf-section').classList.remove('hidden');
-          loadCurrentMTF();
-        } else {
-          console.warn("Not running in Electron.");
-        }
-      });
-
-      const fs = require('fs');
-      const path = require('path');
-
-      const mtfFiles = [
-        { file: 'mtf1_output.json', label: 'MTF1 (Bundle)' },
-        { file: 'mtf2_output.json', label: 'MTF2 (Lens Relay Optics)' },
-        { file: 'mtf3_output.json', label: 'MTF3 (Lens Focusing Optics)' },
-        { file: 'mtf4_output.json', label: 'MTF4 (Detector)' },
-        { file: 'mtf5_output.json', label: 'Combined MTF' }
-      ];
-
-      let currentIndex = 0;
-      let viewMode = '3d';
-
-      function loadCurrentMTF() {
-  const { file, label } = mtfFiles[currentIndex];
-  const matrixPath = path.join(__dirname, 'build', file);
-  document.getElementById('mtf-label').textContent = label;
-
-  if (fs.existsSync(matrixPath)) {
-    const matrixData = JSON.parse(fs.readFileSync(matrixPath));
-    const numRows = matrixData.length;
-    const numCols = matrixData[0].length;
-
-    // Frequency range matches Python meshgrid: [-250, 250] for both axes
-    const linspace = (start, stop, num) => {
-      const step = (stop - start) / (num - 1);
-      return Array.from({ length: num }, (_, i) => start + i * step);
+    const elementInputs = {
+      'Bundle': ['core_diameter', 'core_spacing'],
+      'Lens (Relay Optics)': ['wavelength', 'magnification', 'na'],
+      'Lens (Focusing Optics)': ['wavelength', 'magnification', 'na'],
+      'Detector': ['pixel_size', 'pixel_pitch']
     };
 
-    const freqMin = -250;
-    const freqMax = 250;
-    const xFull = linspace(freqMin, freqMax, numCols);
-    const yFull = linspace(freqMin, freqMax, numRows);
+    const parameterUnits = {
+      core_diameter: 'mm',
+      core_spacing: 'mm',
+      wavelength: 'mm',
+      magnification: '×',
+      na: 'NA',
+      pixel_size: 'um',
+      pixel_pitch: 'um'
+    };
 
-    const centerRow = Math.floor(numRows / 2);
-    const centerCol = Math.floor(numCols / 2);
+    function createBlock(type, idSuffix) {
+      const block = document.createElement('div');
+      block.className = 'element-block';
+      block.innerHTML = `<h3>${type}</h3>`;
 
-    const x = xFull.slice(centerCol);  // ξ direction (row)
-    const y = yFull.slice(centerRow);  // η direction (column)
-
-    const row = matrixData[centerRow].slice(centerCol);               // ξ
-    const col = matrixData.slice(centerRow).map(r => r[centerCol]);   // η
-
-    const rowDC = row[0] || 1;
-    const colDC = col[0] || 1;
-    const rowNorm = row.map(v => v / rowDC);
-    const colNorm = col.map(v => v / colDC);
-
-    let data = [];
-
-    if (viewMode === '3d') {
-      const z = matrixData.slice(centerRow).map(row => row.slice(centerCol));
-      data = [{
-        z,
-        x,
-        y,
-        type: 'surface',
-        colorscale: 'Rdbu'
-      }];
-    } else {
-      if (file === 'mtf1_output.json') {
-        data.push({
-          x,
-          y: rowNorm,
-          type: 'scatter',
-          mode: 'lines+markers',
-          name: 'ξ direction',
-          line: { shape: 'spline', color: 'blue' }
+      if (elementInputs[type]) {
+        const table = document.createElement('table');
+        table.innerHTML = `<tr><th>Parameter</th><th>Value</th><th>Unit</th></tr>`;
+        elementInputs[type].forEach(name => {
+          const label = name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+          const unit = parameterUnits[name] || '';
+          table.innerHTML += `
+            <tr>
+              <td>${label}</td>
+              <td><input type="text" name="${name}" data-type="${type}" /></td>
+              <td>${unit}</td>
+            </tr>`;
         });
+        table.setAttribute('data-type', type);
+        block.appendChild(table);
+      }
 
-        data.push({
-          x,
-          y: colNorm,
-          type: 'scatter',
-          mode: 'lines+markers',
-          name: 'η direction',
-          line: { shape: 'spline', color: 'red' }
+      block.setAttribute('data-type', type);
+      block.setAttribute('data-id', idSuffix);
+      configForm.appendChild(block);
+    }
+
+    ['Bundle', 'Lens (Relay Optics)', 'Detector'].forEach((type, index) => {
+      createBlock(type, index);
+    });
+
+    let focusingCount = 0;
+    addLensBtn.addEventListener('click', () => {
+      if (!document.querySelector('[data-type="Lens (Focusing Optics)"]')) {
+        focusingCount++;
+        createBlock('Lens (Focusing Optics)', `focusing-${focusingCount}`);
+        imgMTF1.classList.add('hidden');
+        imgMTF2.classList.remove('hidden');
+      }
+    });
+
+    removeLensBtn.addEventListener('click', () => {
+      const focusingElement = document.querySelector('[data-type="Lens (Focusing Optics)"]');
+      if (focusingElement) {
+        focusingElement.remove();
+        imgMTF2.classList.add('hidden');
+        imgMTF1.classList.remove('hidden');
+      }
+    });
+
+    generateBtn.addEventListener('click', () => {
+      const blocks = document.querySelectorAll('.element-block');
+      const configData = [];
+
+      blocks.forEach(block => {
+        const type = block.getAttribute('data-type');
+        const inputs = block.querySelectorAll('input');
+        const element = { type };
+        inputs.forEach(input => {
+          element[input.name] = input.value;
         });
+        configData.push(element);
+      });
+
+      if (window.require) {
+        const { ipcRenderer } = require('electron');
+        ipcRenderer.send('save-config', configData);
+        alert("Configuration sent to backend for saving!");
+        document.getElementById('mtf-section').classList.remove('hidden');
+        loadCurrentMTF();
       } else {
-        data.push({
-          x,
-          y: rowNorm,
-          type: 'scatter',
-          mode: 'lines+markers',
-          name: 'MTF vs Spatial Frequency',
-          line: { shape: 'spline' }
-        });
+        console.warn("Not running in Electron.");
+      }
+    });
+
+    const fs = require('fs');
+    const path = require('path');
+
+    const mtfFiles = [
+      { file: 'mtf1_output.json', label: 'MTF1 (Bundle)' },
+      { file: 'mtf2_output.json', label: 'MTF2 (Lens Relay Optics)' },
+      { file: 'mtf3_output.json', label: 'MTF3 (Lens Focusing Optics)' },
+      { file: 'mtf4_output.json', label: 'MTF4 (Detector)' },
+      { file: 'mtf5_output.json', label: 'Combined MTF' }
+    ];
+
+    let currentIndex = 0;
+    let viewMode = '3d';
+
+    function loadCurrentMTF() {
+      const { file, label } = mtfFiles[currentIndex];
+      const matrixPath = path.join(__dirname, 'build', file);
+      document.getElementById('mtf-label').textContent = label;
+      currentLabel = label;
+
+      if (fs.existsSync(matrixPath)) {
+        const matrixData = JSON.parse(fs.readFileSync(matrixPath));
+        const numRows = matrixData.length;
+        const numCols = matrixData[0].length;
+
+        const linspace = (start, stop, num) => {
+          const step = (stop - start) / (num - 1);
+          return Array.from({ length: num }, (_, i) => start + i * step);
+        };
+
+        const freqMin = -250;
+        const freqMax = 250;
+        const xFull = linspace(freqMin, freqMax, numCols);
+        const yFull = linspace(freqMin, freqMax, numRows);
+
+        const centerRow = Math.floor(numRows / 2);
+        const centerCol = Math.floor(numCols / 2);
+
+        x = xFull.slice(centerCol);
+        const y = yFull.slice(centerRow);
+
+        if (file === 'mtf4_output.json') {
+          const mtfSlice = matrixData[centerRow].slice(centerCol);
+          const dc = matrixData[centerRow][centerCol] || 1;
+          rowNorm = mtfSlice.map(v => v / dc);
+          colNorm = rowNorm;
+        } else {
+          const row = matrixData[centerRow].slice(centerCol);
+          const col = matrixData.slice(centerRow).map(r => r[centerCol]);
+          const rowDC = row[0] || 1;
+          const colDC = col[0] || 1;
+          rowNorm = row.map(v => v / rowDC);
+          colNorm = col.map(v => v / colDC);
+        }
+
+        let data = [];
+
+        if (viewMode === '3d') {
+          const z = matrixData.slice(centerRow).map(row => row.slice(centerCol));
+          data = [{ z, x, y, type: 'surface', colorscale: 'Rdbu' }];
+        } else {
+          if (file === 'mtf1_output.json' || file === 'mtf5_output.json') {
+            data.push({ x, y: rowNorm, type: 'scatter', mode: 'lines+markers', name: 'ξ direction', line: { shape: 'spline', color: 'blue' } });
+            data.push({ x, y: colNorm, type: 'scatter', mode: 'lines+markers', name: 'η direction', line: { shape: 'spline', color: 'red' } });
+          } else {
+            data.push({ x, y: rowNorm, type: 'scatter', mode: 'lines+markers', name: 'MTF vs Spatial Frequency', line: { shape: 'spline' } });
+          }
+        }
+
+        const layout = viewMode === '3d'
+          ? { scene: { xaxis: { title: 'X (cycles/mm)' }, yaxis: { title: 'Y (cycles/mm)' }, zaxis: { title: 'MTF Value' } }, title: label }
+          : { xaxis: { title: 'Frequency (cycles/mm)', range: [0, 250], dtick: 50 }, yaxis: { title: 'MTF', range: [0, 1.0], dtick: 0.1 }, title: label };
+
+        Plotly.newPlot('matrix-plot', data, layout);
+      } else {
+        console.warn(`${file} not found.`);
       }
     }
 
-    const layout = viewMode === '3d'
-      ? {
-          scene: {
-            xaxis: { title: 'X (cycles/mm)' },
-            yaxis: { title: 'Y (cycles/mm)' },
-            zaxis: { title: 'MTF Value' }
-          },
-          title: label
-        }
-      : {
-          xaxis: {
-            title: 'Frequency (cycles/mm)',
-            range: [0, 250],
-            dtick: 50,
-          },
-          yaxis: { title: 'MTF' },
-          title: label
-        };
+    document.getElementById('export-csv').addEventListener('click', () => {
+      if (!rowNorm.length || !colNorm.length || !x.length) {
+        alert("No MTF data available to export.");
+        return;
+      }
 
-    Plotly.newPlot('matrix-plot', data, layout);
-  } else {
-    console.warn(`${file} not found.`);
-  }}
+      let csv = "Frequency (cycles/mm),ξ direction,η direction\n";
+      const len = Math.max(rowNorm.length, colNorm.length);
+      for (let i = 0; i < len; i++) {
+        const freq = x[i] !== undefined ? x[i].toFixed(3) : "";
+        const row = rowNorm[i] !== undefined ? rowNorm[i].toFixed(6) : "";
+        const col = colNorm[i] !== undefined ? colNorm[i].toFixed(6) : "";
+        csv += `${freq},${row},${col}\n`;
+      }
 
-      document.getElementById('prev-mtf').addEventListener('click', () => {
-        currentIndex = (currentIndex - 1 + mtfFiles.length) % mtfFiles.length;
-        loadCurrentMTF();
-      });
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement("a");
+      const filename = (currentLabel || "mtf_export").replace(/\s+/g, "_") + ".csv";
 
-      document.getElementById('next-mtf').addEventListener('click', () => {
-        currentIndex = (currentIndex + 1) % mtfFiles.length;
-        loadCurrentMTF();
-      });
+      link.setAttribute("href", URL.createObjectURL(blob));
+      link.setAttribute("download", filename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    });
 
-      document.getElementById('mode-3d').addEventListener('click', () => {
-        viewMode = '3d';
-        loadCurrentMTF();
-      });
+    document.getElementById('prev-mtf').addEventListener('click', () => {
+      currentIndex = (currentIndex - 1 + mtfFiles.length) % mtfFiles.length;
+      loadCurrentMTF();
+    });
 
-      document.getElementById('mode-2d').addEventListener('click', () => {
-        viewMode = '2d';
-        loadCurrentMTF();
-      });
-    };
+    document.getElementById('next-mtf').addEventListener('click', () => {
+      currentIndex = (currentIndex + 1) % mtfFiles.length;
+      loadCurrentMTF();
+    });
 
-    
-  </script>
+    document.getElementById('mode-3d').addEventListener('click', () => {
+      viewMode = '3d';
+      loadCurrentMTF();
+    });
+
+    document.getElementById('mode-2d').addEventListener('click', () => {
+      viewMode = '2d';
+      loadCurrentMTF();
+    });
+  };
+</script>
 </body>
 </html>

@@ -59,13 +59,13 @@
     <form id="config-form" class="element-row"></form>
 
     <div style="margin-top: 10px;">
-      <button id="add-focusing-lens">+ Add Focusing Optics</button>
-      <button id="remove-focusing-lens">- Remove Focusing Optics</button>
+      <button id="add-focusing-lens" type="button">+ Add Focusing Optics</button>
+      <button id="remove-focusing-lens" type="button">- Remove Focusing Optics</button>
     </div>
     <br>
     <div>
-      <button id="generate-config">Generate</button>
-      <button id="go-to-home">Back to Home</button>
+      <button id="generate-config" type="button">Generate</button>
+      <button id="go-to-home" type="button">Back to Home</button>
     </div>
   </div>
 
@@ -80,12 +80,32 @@
     <div id="matrix-plot" style="width: 800px; height: 600px;"></div>
   </div>
   <div style="margin-top: 1rem;">
-  <button id="export-csv">Export to CSV</button>
+  <button id="export-csv" type="button">Export to CSV</button>
   </div>
+  <script>
+  // === (Place this BEFORE your window.onload) ===
+  function enableAllControls() {
+    document.querySelectorAll('input, select, textarea, button')
+      .forEach(el => el.disabled = false);
+  }
+
+  // Run when the DOM is first parsed
+  window.addEventListener('DOMContentLoaded', enableAllControls);
+
+  // Also run when the page is resumed from bfcache / history navigation
+  window.addEventListener('pageshow', enableAllControls);
+  </script>
+  <script>
+    window.addEventListener('beforeunload', () => {
+      try { Plotly.purge('matrix-plot'); } catch {}
+    });
+  </script>
+
 
 
   <script>
   window.onload = () => {
+    enableAllControls();
     const configForm = document.getElementById('config-form');
     const generateBtn = document.getElementById('generate-config');
     const addLensBtn = document.getElementById('add-focusing-lens');
@@ -100,6 +120,10 @@
     let currentLabel = "";
 
     goHomeBtn.addEventListener('click', () => {
+      // kill any active plot work
+      try { Plotly.purge('matrix-plot'); } catch {}
+      document.getElementById('mtf-section').classList.add('hidden');
+
       if (window.require) {
         const { ipcRenderer } = require('electron');
         ipcRenderer.send('navigate-to-home');
@@ -107,6 +131,7 @@
         window.location.href = "index.html";
       }
     });
+
 
     const elementInputs = {
       'Bundle': ['core_diameter', 'core_spacing'],
@@ -116,9 +141,9 @@
     };
 
     const parameterUnits = {
-      core_diameter: 'mm',
-      core_spacing: 'mm',
-      wavelength: 'mm',
+      core_diameter: 'um',
+      core_spacing: 'um',
+      wavelength: 'um',
       magnification: '×',
       na: 'NA',
       pixel_size: 'um',
@@ -175,7 +200,7 @@
       }
     });
 
-    generateBtn.addEventListener('click', () => {
+    generateBtn.addEventListener('click', async () => {
       const blocks = document.querySelectorAll('.element-block');
       const configData = [];
 
@@ -193,12 +218,18 @@
         const { ipcRenderer } = require('electron');
         ipcRenderer.send('save-config', configData);
         alert("Configuration sent to backend for saving!");
-        document.getElementById('mtf-section').classList.remove('hidden');
-        loadCurrentMTF();
+
+        // Unhide and load MTF asynchronously (non-blocking)
+        const mtfSection = document.getElementById('mtf-section');
+        mtfSection.classList.remove('hidden');
+
+        // Call new async version of loadCurrentMTF
+        loadCurrentMTF(); // fire and forget
       } else {
         console.warn("Not running in Electron.");
       }
     });
+
 
     const fs = require('fs');
     const path = require('path');
@@ -212,16 +243,32 @@
     ];
 
     let currentIndex = 0;
-    let viewMode = '3d';
+    let viewMode = '2d';
+    let loadingMTF = false;
 
-    function loadCurrentMTF() {
-      const { file, label } = mtfFiles[currentIndex];
-      const matrixPath = path.join(__dirname, 'build', file);
-      document.getElementById('mtf-label').textContent = label;
-      currentLabel = label;
+    async function loadCurrentMTF() {
+      if (loadingMTF) return;          // don't reenter
+      loadingMTF = true;
 
-      if (fs.existsSync(matrixPath)) {
-        const matrixData = JSON.parse(fs.readFileSync(matrixPath));
+      try {
+        const { file, label } = mtfFiles[currentIndex];
+        const matrixPath = path.join(__dirname, 'build', file);
+        document.getElementById('mtf-label').textContent = label;
+        currentLabel = label;
+
+        // bail if file missing
+        if (!fs.existsSync(matrixPath)) {
+          console.warn(`${file} not found.`);
+          return;
+        }
+
+        // 1) Yield so typing stays instant
+        await new Promise(requestAnimationFrame);
+
+        // 2) Read JSON async
+        const txt = await fs.promises.readFile(matrixPath, 'utf-8');
+        const matrixData = JSON.parse(txt);
+
         const numRows = matrixData.length;
         const numCols = matrixData[0].length;
 
@@ -255,8 +302,10 @@
           colNorm = col.map(v => v / colDC);
         }
 
-        let data = [];
+        // 3) Yield again right before plotting (Plotly is heavy)
+        await new Promise(requestAnimationFrame);
 
+        let data = [];
         if (viewMode === '3d') {
           const z = matrixData.slice(centerRow).map(row => row.slice(centerCol));
           data = [{ z, x, y, type: 'surface', colorscale: 'Rdbu' }];
@@ -269,13 +318,41 @@
           }
         }
 
-        const layout = viewMode === '3d'
-          ? { scene: { xaxis: { title: 'X (cycles/mm)' }, yaxis: { title: 'Y (cycles/mm)' }, zaxis: { title: 'MTF Value' } }, title: label }
-          : { xaxis: { title: 'Frequency (cycles/mm)', range: [0, 250], dtick: 50 }, yaxis: { title: 'MTF', range: [0, 1.0], dtick: 0.1 }, title: label };
+        const layout =
+          viewMode === '3d'
+            ? {
+                title: label,
+                scene: {
+                  // Keep 0,0 near the viewer
+                  xaxis: { title: 'X (cycles/mm)', range: [0, 250], autorange: false },
+                  yaxis: { title: 'Y (cycles/mm)', range: [0, 250], autorange: false },
+                  zaxis: { title: 'MTF Value', range: [0, 1], autorange: false },
 
-        Plotly.newPlot('matrix-plot', data, layout);
-      } else {
-        console.warn(`${file} not found.`);
+                  // Camera looking from negative X & Y toward the origin so (0,0) is front
+                  camera: {
+                    eye: { x: -1.6, y: -1.6, z: 1.2 }, // tweak to taste
+                    center: { x: 0, y: 0, z: 0 },
+                    up: { x: 0, y: 0, z: 1 }
+                  },
+
+                  // Optional: keep proportions sensible
+                  aspectmode: 'cube'
+                }
+              }
+            : {
+                title: label,
+                xaxis: { title: 'Frequency (cycles/mm)', range: [0, 250], dtick: 50 },
+                yaxis: { title: 'MTF', range: [0, 1.0], dtick: 0.1 }
+              };
+
+        // purge previous plot to free resources
+        Plotly.purge('matrix-plot');
+        await Plotly.newPlot('matrix-plot', data, layout);
+
+      } catch (e) {
+        console.error('loadCurrentMTF failed:', e);
+      } finally {
+        loadingMTF = false;
       }
     }
 

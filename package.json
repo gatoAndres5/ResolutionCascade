@@ -12,8 +12,16 @@
     "productName": "ResolutionCascade",
     "win": {
       "target": "nsis"
-    }
+    },
+    "files": [
+      "**/*",
+      "!venv{,/**}",          
+      "!**/__pycache__/**",
+      "!**/*.pyc"
+    ]
+    
   },
+  
   "keywords": [],
   "author": "",
   "license": "ISC",

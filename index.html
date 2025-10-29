@@ -1,5 +1,13 @@
 <!DOCTYPE html>
 <html>
+  <script>
+    function enableAllControls(){ 
+      document.querySelectorAll('input, select, textarea, button')
+        .forEach(el => el.disabled = false);
+    }
+    window.addEventListener('DOMContentLoaded', enableAllControls);
+    window.addEventListener('pageshow', enableAllControls);
+</script>
   <head>
     <title>Resolution Cascade</title>
   </head>

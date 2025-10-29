@@ -59,9 +59,6 @@ def detectorMTF():
     wx = (pixel_width_um / 1000) / magnification
     pitch = wx if pixel_pitch_um is None else (pixel_pitch_um / 1000) / magnification
 
-    # Build frequency grid
-    x = np.linspace(-((width - 1) / 2), ((width - 1) / 2), width)
-    y = np.linspace(-((height - 1) / 2), ((height - 1) / 2), height)
     # Build frequency grid (cycles/mm)
     freq_vals = np.linspace(-250, 250, width)
     Xi, Eta = np.meshgrid(freq_vals, freq_vals)
@@ -69,22 +66,22 @@ def detectorMTF():
     # Compute MTF
     footprint = np.abs(np.sinc(Xi * wx)) * np.abs(np.sinc(Eta * wx))
     sample = np.abs(np.sinc(Xi * pitch)) * np.abs(np.sinc(Eta * pitch))
-    mtf3 = np.abs(footprint * sample)
+    MTF4 = np.abs(footprint * sample)
 
     # Normalize to DC
-    max_val = mtf3[height // 2][width // 2]
+    max_val = MTF4[height // 2][width // 2]
     if max_val != 0:
-        mtf3 /= max_val
+        MTF4 /= max_val
 
     # Save result
     with open(output_path, "w") as f:
-        json.dump(mtf3.tolist(), f)
+        json.dump(MTF4.tolist(), f)
 
     print("MTF4 (detector) calculation complete. Saved to mtf4_output.json.")
 
     # Print MTF values at target spatial frequencies
     center_idx = width // 2
-    mtf_slice = mtf3[height // 2, center_idx:]
+    mtf_slice = MTF4[height // 2, center_idx:]
     freqs = freq_vals[center_idx:]
 
     print("MTF Values (Detector Model):")
@@ -126,6 +123,9 @@ def lensRelayMTF():
             json.dump(ones_matrix, f)
         print("MTF2 skipped: missing config values. Output is a matrix of all 1s.")
         return
+    
+    # Convert from micrometers to millimeters
+    wavelength = wavelength / 1000.0
 
     # Build frequency coordinate grid (in cycles/mm)
     freq_vals = np.linspace(-250, 250, width)
@@ -200,6 +200,9 @@ def lensFocusingMTF():
         print("MTF3 skipped: missing config values. Output is a matrix of all 1s.")
         return
 
+    # Convert from micrometers to millimeters
+    wavelength = wavelength / 1000.0
+    
     # Build frequency coordinate grid (in cycles/mm)
     freq_vals = np.linspace(-250, 250, width)
     Xi, Eta = np.meshgrid(freq_vals, freq_vals)
@@ -266,14 +269,17 @@ def bundleMTF():
         ones = [[1.0 for _ in range(width)] for _ in range(height)]
         with open(output_path, "w") as f:
             json.dump(ones, f)
-        print("⚠️ Missing bundle values. Output is all 1s.")
+        print("Missing bundle values. Output is all 1s.")
         return
+    # Convert from micrometers to millimeters
+    d_core = d_core / 1000.0
+    d_spacing = d_spacing / 1000.0
 
-    # Frequency grid [-250, 250] to match your working test
+    # Frequency grid [-250, 250] 
     freq_vals = np.linspace(-250, 250, width)
     Xi, Eta = np.meshgrid(freq_vals, freq_vals)
 
-    # --- MTF computation (EXACTLY as in your test) ---
+    # MTF computation 
     theta = np.deg2rad(60)
     u = Xi * np.cos(theta) + Eta * np.sin(theta)
     x_samp = d_spacing
@@ -305,16 +311,16 @@ def bundleMTF():
     with open(output_path, "w") as f:
         json.dump(MTF1.tolist(), f)
 
-    print("✅ MTF1 (bundle) written to", output_path)
+    print("MTF1 (bundle) written to", output_path)
 
-    # === Print diagnostic values (exact same as test) ===
+    # Print diagnostic values 
     center_idx = width // 2
     xi_slice = MTF1[center_idx, center_idx:]   # ξ direction (row)
     eta_slice = MTF1[center_idx:, center_idx]  # η direction (col)
     freqs = freq_vals[center_idx:]             # Positive freqs only
 
     target_freqs = [50, 100, 150, 200, 250]
-    print("📊 MTF Values (Bundle):")
+    print("MTF Values (Bundle):")
     for f in target_freqs:
         idx = np.argmin(np.abs(freqs - f))
         print(f"  Frequency {f:>3} cycles/mm → ξ (E): {xi_slice[idx]:.4f}, η (N): {eta_slice[idx]:.4f}")

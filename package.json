@@ -1,27 +1,54 @@
 {
   "name": "resolutioncascade",
   "version": "1.0.0",
-  "description": "Desktop app with Election",
+  "description": "Desktop app with Electron",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder"
+    "dist:win": "electron-builder --win nsis portable",
+    "dist:installer": "electron-builder --win nsis",
+    "dist:portable": "electron-builder --win portable"
   },
   "build": {
     "appId": "com.example.resolutioncascade",
     "productName": "ResolutionCascade",
-    "win": {
-      "target": "nsis"
+
+    "asar": true,
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"        
     },
+
     "files": [
-      "**/*",
-      "!venv{,/**}",          
+      "main.js",
+      "preload.js",
+      "index.html",
+      "config.html",
+      "assets/**",
+      "build/**",
+      "package.json",
+      "!dist{,/**}",
+      "!venv{,/**}",
       "!**/__pycache__/**",
-      "!**/*.pyc"
-    ]
-    
+      "!**/*.pyc",
+      "!.git{,/**}",
+      "!.vscode{,/**}"
+    ],
+
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "icon": "build/icon.ico"
+    },
+
+    "nsis": {
+      "oneClick": true,
+      "allowToChangeInstallationDirectory": false
+    }
   },
-  
+
   "keywords": [],
   "author": "",
   "license": "ISC",
